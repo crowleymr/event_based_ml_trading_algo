@@ -41,7 +41,8 @@ def cached_json(url, path, cfg):
     path = Path(path)
     if path.exists():
         return json.loads(path.read_text())
-    ua = os.environ.get("SEC_USER_AGENT") or cfg.get("sec_user_agent")
+    contact_file = Path(".sec-user-agent")
+    ua = os.environ.get("SEC_USER_AGENT") or cfg.get("sec_user_agent") or (contact_file.read_text().strip() if contact_file.exists() else None)
     if not ua or "@" not in ua:
         raise ValueError("Set SEC_USER_AGENT to a real name/application and contact email")
     path.parent.mkdir(parents=True, exist_ok=True)

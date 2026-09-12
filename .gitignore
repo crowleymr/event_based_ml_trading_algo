@@ -206,6 +206,7 @@ tempCodeRunnerFile.py
 # Immutable local source data and run outputs are preserved outside Git.
 data/
 runs/
+.sec-user-agent
 pytest-cache-files-*/
 
 # Ruff stuff:
