@@ -203,6 +203,11 @@ cython_debug/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
 
+# Immutable local source data and run outputs are preserved outside Git.
+data/
+runs/
+pytest-cache-files-*/
+
 # Ruff stuff:
 .ruff_cache/
 
