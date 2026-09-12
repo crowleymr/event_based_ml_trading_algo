@@ -1,0 +1,12 @@
+mode: live
+data_dir: data
+runs_dir: runs
+universe: configs/universe.txt
+start: '2015-01-01'
+end: '2026-09-12'
+horizon: 5
+cost_bps: 10
+top_k: 10
+seed: 42
+retries: 4
+throttle_seconds: 0.3

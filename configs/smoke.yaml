@@ -1,0 +1,12 @@
+mode: synthetic
+data_dir: data/smoke
+runs_dir: runs/smoke
+universe: configs/universe.txt
+start: '2015-01-01'
+end: '2026-09-12'
+horizon: 5
+cost_bps: 10
+top_k: 10
+seed: 42
+synthetic_sessions: 650
+synthetic_securities: 12

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trading-pipeline"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["polars>=1.30,<2", "duckdb>=1.2,<2", "pyarrow>=19", "scikit-learn>=1.6,<2", "yfinance>=0.2.65,<1", "requests>=2.32", "PyYAML>=6", "matplotlib>=3.9", "joblib>=1.4"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
