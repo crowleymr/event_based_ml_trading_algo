@@ -48,3 +48,9 @@ def test_missing_held_bar_fails():
     p, bars = fixture()
     with pytest.raises(ValueError, match="Missing held"):
         backtest(p, bars.filter(~((pl.col("security_id") == "a") & (pl.col("session_date") == date(2020, 1, 8)))), "E1", "test", top_k=1)
+
+
+def test_buy_hold_trades_once():
+    p, bars = fixture()
+    _, _, trades = backtest(p, bars, "B0", "test", top_k=1, buy_hold=True)
+    assert trades.height == 1

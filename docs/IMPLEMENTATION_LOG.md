@@ -19,3 +19,10 @@ Added weekly T+1-close holdings accounting with drift and self-financing costs.
 Verification: 13 tests passed. Full synthetic E0–E5 run completed at
 runs/smoke/20260912T070326Z-3265a9d6. This is not empirical trading evidence.
 Real SEC mapping fetched; corrected verified MMC -> MRSH rename for the same issuer.
+
+## 2026-09-12 — Runner and verification
+Implemented immutable run snapshots/hashes, fitted model persistence, selection lock,
+E0–E5 metrics/plots and manual GitHub Actions smoke upload. Added SPY B0 benchmark
+using the existing approved Yahoo provider. Verification: 15 tests passed before
+benchmark addition, including two identical seeded complete smoke runs and a
+final-test-label perturbation test confirming unchanged validation selection.

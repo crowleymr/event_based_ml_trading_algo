@@ -30,7 +30,7 @@ def financial_metrics(curve):
             "cumulative_transaction_cost": float(curve["cost"].sum()), "sessions": len(r)}
 
 
-def backtest(predictions, bars, experiment, split, top_k=10, cost_bps=10, inverse=False):
+def backtest(predictions, bars, experiment, split, top_k=10, cost_bps=10, inverse=False, buy_hold=False):
     if predictions.is_empty():
         raise ValueError("Empty predictions")
     calendar = bars["session_date"].unique().sort().to_list()
@@ -43,6 +43,8 @@ def backtest(predictions, bars, experiment, split, top_k=10, cost_bps=10, invers
         if week not in seen:
             signal_dates.append(day)
             seen.add(week)
+    if buy_hold:
+        signal_dates = signal_dates[:1]
     groups = {g["session_date"][0]: g for g in predictions.partition_by("session_date")}
     executions = {}
     for day in signal_dates:
