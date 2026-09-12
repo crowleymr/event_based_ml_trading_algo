@@ -6,6 +6,7 @@ from trading_pipeline.run import run
 from trading_pipeline.data import synthetic
 from trading_pipeline.features import build, temporal_split
 from trading_pipeline.models import choose_models
+from trading_pipeline.audit import audit
 
 
 def test_selection_ignores_final_test(tmp_path):
@@ -23,6 +24,7 @@ def test_selection_ignores_final_test(tmp_path):
 def test_smoke_reproducibility_and_contract(tmp_path):
     cfg = load_config("configs/smoke.yaml") | {"data_dir": str(tmp_path / "data"), "runs_dir": str(tmp_path / "runs")}
     first, second = run(cfg), run(cfg)
+    assert audit(first)["passed"]
     for name in ("config.yaml", "metadata.json", "dataset_manifest.json", "split_manifest.json", "metrics.json",
                  "predictions.parquet", "positions.parquet", "trades.parquet", "equity_curve.parquet",
                  "feature_importance.parquet", "selection.json", "summary.md", "plots/equity_curve.png",

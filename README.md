@@ -73,6 +73,18 @@ liquidated. Missing held or execution bars cause an explicit failure.
 
 Runs and raw data are deliberately Git-ignored, not deleted. Back them up separately.
 Manual GitHub Actions runs tests, offline smoke and uploads both data and artefacts.
+Each complete run also passes the persisted-data integrity audit (`audit.json`).
+To re-audit without retraining:
+
+```powershell
+.venv/Scripts/python -m trading_pipeline.audit --run runs/20260912T071137Z-9899fd9a
+```
+
+Raw caches are intentionally immutable. For a new source vintage, choose a new
+`data_dir` in a copied config; preserve the old directory and run manifests.
+Hardware inventory, CPU model/core count, NVIDIA model/VRAM, driver compatibility,
+installed CUDA toolkit/runtime and actual CPU model devices are recorded. Missing
+CUDA/tools do not prevent CPU runs. No GPU dependencies are required.
 
 ## Limitations and review
 

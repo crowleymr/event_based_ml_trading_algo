@@ -15,6 +15,8 @@ from trading_pipeline.data import ingest, digest, write_parquet, yahoo_bars
 from trading_pipeline.features import build, temporal_split, F0, F1
 from trading_pipeline.models import choose_models, predict_test, metrics, MATRIX
 from trading_pipeline.portfolio import backtest, financial_metrics
+from trading_pipeline.environment import detect_environment, model_devices
+from trading_pipeline.audit import audit
 
 
 def json_write(path, value):
@@ -58,6 +60,7 @@ def run(cfg):
     handler = logging.FileHandler(root / "pipeline.log", encoding="utf-8")
     logging.getLogger().addHandler(handler)
     metadata = {"run_id": run_id, "timestamp": datetime.now(timezone.utc).isoformat(), "mode": cfg["mode"],
+                "environment": detect_environment(), **model_devices(cfg["seed"]),
                 "seed": cfg["seed"], "label_horizon": 5, "cost_bps_one_way": cfg["cost_bps"],
                 "execution": "first session of ISO week signal after close T, fill T+1 close",
                 "git_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
@@ -172,7 +175,8 @@ def run(cfg):
                     "T+1-close fills; close-to-close target differs from executable return. No slippage model beyond 10 bps.",
                     f"B0: {benchmark_status}. No tree importance extras. Terminal holdings marked, not liquidated.",
                     "Stage-gate success requires human research judgement; no alpha claim is made."]
-        (root / "summary.md").write_text("\n\n".join(summary), encoding="utf-8")
+        (root / "summary.md").write_text("\n\n".join(summary).replace("|\n\n|", "|\n|"), encoding="utf-8")
+        audit(root)
         json_write(root / "metadata.json", metadata | {"status": "complete", "split_dates": split_manifest,
                    "experiments": MATRIX | {"E0": ["momentum", "equal_weight"], "E5": [selection["e5_source"], "inverse_vol"]}})
         logging.info("Completed: %s", root)

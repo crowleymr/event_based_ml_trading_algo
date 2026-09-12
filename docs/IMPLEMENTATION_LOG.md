@@ -26,3 +26,31 @@ E0–E5 metrics/plots and manual GitHub Actions smoke upload. Added SPY B0 bench
 using the existing approved Yahoo provider. Verification: 15 tests passed before
 benchmark addition, including two identical seeded complete smoke runs and a
 final-test-label perturbation test confirming unchanged validation selection.
+
+## 2026-09-12 — Real run and audit
+Full live run completed: runs/20260912T071137Z-9899fd9a (core commit 9cadfe9).
+100 equities, 294000 daily bars, 2015-01-02 through 2026-09-11; 51934 SEC facts.
+SEC issuer coverage: basic EPS 99%, Net Income 100%. Visa lacks the exact basic EPS
+tag; retained with train-only imputation. No company or fundamental tag substituted.
+E0–E5 and SPY B0 completed. E5 selected E3 from validation IC, before final test.
+Independent 17-check audit passed, including SHA256, PIT, purge, identical E5
+predictions/selections, T+1, cost and equity reconciliation. Equity plot inspected.
+No test performance was used to change settings. 16-test suite passed after audit addition.
+
+## 2026-09-12 — Concurrent authoritative document update
+Observed user changes to FSD/plan adding hardware/reproducibility metadata. Reviewed
+the complete diff and implemented best-effort CPU/GPU and CUDA inventory, actual
+CPU devices, deterministic settings and fallback explanation. The existing live
+metadata was supplemented explicitly after execution on the same host, without
+rerunning or selecting on test outcomes. Future runs record this at startup.
+Detected Ryzen 5 3600 (6 physical/12 logical cores), RTX 4060 Ti (16380 MiB), installed
+CUDA toolkit/runtime 11.8; driver CUDA compatibility was not discoverable and is
+explicitly unknown. No GPU execution or scope expansion.
+
+## 2026-09-12 — Final verification
+17 tests passed in 17.77 seconds. Final synthetic single-command smoke completed at
+runs/smoke/20260912T072009Z-573f1f57 with startup hardware metadata and automatic
+17-check integrity audit. Live-run audit passed 17/17 separately. Repaired Markdown
+table spacing in the persisted live summary only; no predictions/metrics changed.
+Created docs/SLICE1_COMPLETION_REPORT.md covering every DoD item, commands, artefacts,
+known limitations and stage-gate risks. Remote GitHub workflow not dispatched.
