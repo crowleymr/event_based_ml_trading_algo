@@ -24,6 +24,16 @@ def test_ingestion_idempotency(tmp_path):
         validate(master, pl.concat([bars, bars.head(1)]), facts)
     with pytest.raises(ValueError, match="Invalid market values"):
         validate(master, bars.with_columns(pl.lit(-1.).alias("volume")), facts)
+    with pytest.raises(ValueError, match="Null market key"):
+        validate(master, bars.with_columns(pl.lit(None, dtype=pl.Date).alias("session_date")), facts)
+
+
+def test_conflicting_sec_fact_identity_is_rejected(tmp_path):
+    cfg = load_config("configs/smoke.yaml") | {"data_dir": str(tmp_path), "synthetic_sessions": 280}
+    master, bars, facts = ingest(cfg)
+    conflict = facts.head(1).with_columns((pl.col("fact_value") + 1).alias("fact_value"))
+    with pytest.raises(ValueError, match="Conflicting SEC fact"):
+        validate(master, bars, pl.concat([facts, conflict]))
 
 
 def test_raw_cache_does_not_request_network(tmp_path, monkeypatch):

@@ -54,3 +54,23 @@ runs/smoke/20260912T072009Z-573f1f57 with startup hardware metadata and automati
 table spacing in the persisted live summary only; no predictions/metrics changed.
 Created docs/SLICE1_COMPLETION_REPORT.md covering every DoD item, commands, artefacts,
 known limitations and stage-gate risks. Remote GitHub workflow not dispatched.
+
+## 2026-09-13 — Layout and operator documentation
+Audited the implementation against the planned package layout. The required behavior
+existed, but data, features, models and portfolio logic were each concentrated in one
+broad module. Refactored these into the planned data, features, modelling, portfolio,
+tracking and validation packages while preserving research policies and public imports.
+Added a descriptive operator README, folder diagram, smoke/main quickstart, linked
+documentation table, architecture/component status, persisted-results notebook, and
+layout import tests. The first refactor checkpoint retained all 17 existing tests.
+Verification after the full package split: 19 tests passed in 18.00 seconds and the
+single-command synthetic run completed at runs/smoke/20260913T013307Z-0d43406e,
+including E0-E5 and the persisted-run audit.
+An independent higher-model architecture review found no missing mandatory component
+or locked-policy regression. It reproduced validation gaps for null market keys,
+conflicting SEC facts and null audit values, plus broad shared-cache provenance.
+These were fixed with negative tests, run-local feature snapshots, exact consumed-input
+hashes and recursive package source hashing.
+Final verification: 20 tests passed in 18.60 seconds. A clean post-review smoke run
+completed at runs/smoke/20260913T014046Z-f9b25e3a; its automatic 17-check audit and
+manual re-audit both passed.

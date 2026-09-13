@@ -115,3 +115,17 @@ the user were reviewed and preserved.
 No known failing correctness tests remain. The engineering evidence supports review
 against the GREEN criteria, with the above coverage and research caveats. No deferred
 NLP, RL, MPT, intraday, Australian equity, neural-network or production UI work was added.
+
+## Architecture follow-up — 13 September 2026
+
+The source package was refactored to match the component layout in the implementation
+plan. The previously broad data, features, models and portfolio modules now have explicit
+data, feature, modelling, portfolio, tracking and validation subpackages. An independent
+higher-model review confirmed that no mandatory component was missing and found no
+regression in the locked research rules.
+
+All demonstrated review findings were fixed: null primary keys and conflicting SEC facts
+are rejected; null predictions, weights and filing provenance fail audit; package source
+hashing is recursive; feature snapshots are run-local; and raw provenance lists only
+consumed inputs. Final verification passed 20 tests and a complete E0-E5 smoke run at
+runs/smoke/20260913T014046Z-f9b25e3a. Its automatic 17-check artefact audit passed.

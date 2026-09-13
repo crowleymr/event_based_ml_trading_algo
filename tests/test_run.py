@@ -1,18 +1,21 @@
 import json
 from pathlib import Path
 import polars as pl
+import pytest
 from trading_pipeline.config import load_config
 from trading_pipeline.run import run
 from trading_pipeline.data import synthetic
-from trading_pipeline.features import build, temporal_split
-from trading_pipeline.models import choose_models
+from trading_pipeline.features import build
+from trading_pipeline.modelling.targets import add_target
+from trading_pipeline.modelling.splits import temporal_split
+from trading_pipeline.modelling.training import choose_models
 from trading_pipeline.audit import audit
 
 
 def test_selection_ignores_final_test(tmp_path):
     cfg = load_config("configs/smoke.yaml")
     _, bars, facts = synthetic(cfg, tmp_path / "raw")
-    frame, _ = temporal_split(build(bars, facts))
+    frame, _ = temporal_split(add_target(build(bars, facts)))
     changed = frame.with_columns(pl.when(pl.col("split") == "test").then(1e8)
                                  .otherwise(pl.col("forward_return_5d")).alias("forward_return_5d"))
     _, first, predictions = choose_models(frame, 42)
@@ -31,6 +34,16 @@ def test_smoke_reproducibility_and_contract(tmp_path):
                  "plots/drawdown.png", "plots/model_comparison.png"):
         assert (first / name).is_file()
     assert json.loads((first / "metrics.json").read_text()) == json.loads((second / "metrics.json").read_text())
+    metadata = json.loads((first / "metadata.json").read_text())
+    assert any(path.endswith("data/schemas.py") for path in metadata["source_sha256"])
+    assert any(path.endswith("portfolio/backtest.py") for path in metadata["source_sha256"])
+    manifest = json.loads((first / "dataset_manifest.json").read_text())
+    assert Path(manifest["feature_path"]).parent == first / "datasets"
+    assert all("relative_cache_path" in item for item in manifest["raw_files"])
+    metadata = json.loads((first / "metadata.json").read_text())
+    assert "src\\trading_pipeline\\data\\schemas.py" in metadata["source_sha256"] or (
+        "src/trading_pipeline/data/schemas.py" in metadata["source_sha256"]
+    )
     a, b = pl.read_parquet(first / "predictions.parquet"), pl.read_parquet(second / "predictions.parquet")
     assert a.equals(b)
     assert set(a["model_id"]) == {f"E{i}" for i in range(6)}
@@ -39,3 +52,10 @@ def test_smoke_reproducibility_and_contract(tmp_path):
     assert a.filter(pl.col("model_id") == winner).select(cols).equals(a.filter(pl.col("model_id") == "E5").select(cols))
     trades = pl.read_parquet(first / "trades.parquet")
     assert trades.filter(pl.col("execution_date") <= pl.col("signal_date")).is_empty()
+    corrupted = a.with_columns(
+        pl.when(pl.int_range(pl.len()) == 0).then(None)
+        .otherwise(pl.col("predicted_return_5d")).alias("predicted_return_5d")
+    )
+    corrupted.write_parquet(first / "predictions.parquet")
+    with pytest.raises(ValueError, match="prediction_finite"):
+        audit(first)

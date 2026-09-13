@@ -3,7 +3,9 @@ import polars as pl
 import pytest
 from trading_pipeline.config import load_config
 from trading_pipeline.data import synthetic, FACT_SCHEMA
-from trading_pipeline.features import market_features, join_fundamentals, add_target, temporal_split, F0
+from trading_pipeline.features import market_features, join_fundamentals, F0
+from trading_pipeline.modelling.targets import add_target
+from trading_pipeline.modelling.splits import temporal_split
 
 
 def sample(tmp_path):

@@ -2,7 +2,6 @@
 import argparse
 from datetime import datetime, timezone
 import importlib.metadata
-import json
 import logging
 from pathlib import Path
 import subprocess
@@ -12,43 +11,15 @@ import polars as pl
 import yaml
 from trading_pipeline.config import load_config
 from trading_pipeline.data import ingest, digest, write_parquet, yahoo_bars
-from trading_pipeline.features import build, temporal_split, F0, F1
-from trading_pipeline.models import choose_models, predict_test, metrics, MATRIX
+from trading_pipeline.features import build, F0, F1
+from trading_pipeline.modelling.targets import add_target
+from trading_pipeline.modelling.splits import temporal_split
+from trading_pipeline.modelling.training import choose_models, predict_test, MATRIX
+from trading_pipeline.modelling.evaluate import metrics
 from trading_pipeline.portfolio import backtest, financial_metrics
 from trading_pipeline.environment import detect_environment, model_devices
 from trading_pipeline.audit import audit
-
-
-def json_write(path, value):
-    path.write_text(json.dumps(value, indent=2, default=str, allow_nan=False), encoding="utf-8")
-
-
-def plots(curves, comparison, root):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    root.mkdir(exist_ok=True)
-    for metric, filename in [("equity", "equity_curve.png"), ("drawdown", "drawdown.png")]:
-        fig, ax = plt.subplots(figsize=(10, 5))
-        for group in curves.filter(pl.col("split") == "test").partition_by("experiment"):
-            values = group["equity"].to_numpy()
-            if metric == "drawdown":
-                import numpy as np
-                values = values / np.maximum.accumulate(np.r_[1., values])[1:] - 1
-            ax.plot(group["session_date"].to_list(), values, label=group["experiment"][0])
-        ax.set(title=f"Held-out test {metric}", ylabel=metric)
-        ax.legend(ncol=3)
-        fig.autofmt_xdate()
-        fig.tight_layout()
-        fig.savefig(root / filename, dpi=140)
-        plt.close(fig)
-    fig, ax = plt.subplots(figsize=(9, 5))
-    test = comparison.filter(pl.col("split") == "test")
-    ax.bar(test["experiment"].to_list(), test["total_return"].to_list())
-    ax.set(title="Held-out test return after costs (not a selection criterion)", ylabel="Total return")
-    fig.tight_layout()
-    fig.savefig(root / "model_comparison.png", dpi=140)
-    plt.close(fig)
+from trading_pipeline.tracking.artefacts import input_vintage, json_write, plots
 
 
 def run(cfg):
@@ -65,7 +36,7 @@ def run(cfg):
                 "execution": "first session of ISO week signal after close T, fill T+1 close",
                 "git_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
                 "git_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()),
-                "source_sha256": {str(p): digest(p) for p in sorted(Path("src/trading_pipeline").glob("*.py"))},
+                "source_sha256": {p.as_posix(): digest(p) for p in sorted(Path("src/trading_pipeline").rglob("*.py"))},
                 "dependencies": {p: importlib.metadata.version(p) for p in
                                  ("polars", "duckdb", "pyarrow", "scikit-learn", "yfinance", "numpy")}}
     json_write(root / "metadata.json", metadata | {"status": "running"})
@@ -83,24 +54,26 @@ def run(cfg):
                 benchmark_status = f"Optional B0 unavailable: {exc}"
                 logging.warning(benchmark_status)
         logging.info("Building features and temporal split")
-        frame, split_manifest = temporal_split(build(bars, facts))
+        frame, split_manifest = temporal_split(add_target(build(bars, facts)))
         feature_path = Path(cfg["data_dir"]) / "features" / run_id / "features.parquet"
         write_parquet(frame, feature_path)
+        run_feature_path = root / "datasets" / "features.parquet"
+        write_parquet(frame, run_feature_path)
         # Per-run immutable curated snapshot: later ingestion cannot invalidate an experiment.
         for name, data in [("security_master", master), ("market_bars", bars), ("fundamental_facts", facts)]:
             write_parquet(data, root / "datasets" / f"{name}.parquet")
         json_write(root / "split_manifest.json", split_manifest)
-        raw_root = Path(cfg["data_dir"]) / "raw"
         manifest = {"benchmark": benchmark_status, "security_count": master.height, "mapping_coverage": 1., "market_rows": bars.height,
                     "market_start": str(bars["session_date"].min()), "market_end": str(bars["session_date"].max()),
-                    "fact_rows": facts.height, "feature_path": str(feature_path.resolve()), "feature_sha256": digest(feature_path),
+                    "fact_rows": facts.height, "feature_path": str(run_feature_path.resolve()),
+                    "canonical_feature_path": str(feature_path.resolve()),
+                    "feature_sha256": digest(run_feature_path),
                     "market_coverage": bars.group_by("ticker").agg(pl.len().alias("sessions"),
                          pl.col("session_date").min().alias("start"), pl.col("session_date").max().alias("end")).sort("ticker").to_dicts(),
                     "sec_coverage": {name: facts.filter(pl.col("fact_name") == name)["security_id"].n_unique() / master.height
                                      for name in ("EarningsPerShareBasic", "NetIncomeLoss")},
                     "feature_null_fraction": {c: frame[c].null_count() / frame.height for c in F1},
-                    "raw_files": [{"path": str(p.resolve()), "sha256": digest(p)} for p in sorted(raw_root.rglob("*"))
-                                  if p.is_file() and "library_cache" not in p.parts],
+                    "raw_files": input_vintage(cfg, master, benchmark is not None),
                     "curated_snapshot": [{"path": str(p.resolve()), "sha256": digest(p)} for p in sorted((root / "datasets").glob("*.parquet"))]}
         json_write(root / "dataset_manifest.json", manifest)
         logging.info("Training four model/feature combinations; validation selection only")

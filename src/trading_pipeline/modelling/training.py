@@ -1,40 +1,23 @@
-"""Small validation-only grids. Final test is scored only after selection is frozen."""
-import numpy as np
+"""Validation-only model selection and frozen test prediction."""
 import polars as pl
 from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import ElasticNet
-from sklearn.ensemble import HistGradientBoostingRegressor
-from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 from threadpoolctl import threadpool_limits
 from trading_pipeline.features import F0, F1
+from .elastic_net import GRID as ELASTIC_NET_GRID, build_elastic_net
+from .gbt import GRID as GBT_GRID, build_gbt
+from .evaluate import metrics
 
 MATRIX = {"E1": ("F0", "elastic_net"), "E2": ("F0", "gbt"),
           "E3": ("F1", "elastic_net"), "E4": ("F1", "gbt")}
-GRIDS = {"elastic_net": [{"alpha": a, "l1_ratio": r} for a in (.0001, .001) for r in (.1, .5)],
-         "gbt": [{"max_leaf_nodes": leaves, "l2_regularization": l2} for leaves in (7, 15) for l2 in (1., 10.)]}
+GRIDS = {"elastic_net": ELASTIC_NET_GRID, "gbt": GBT_GRID}
 
 
 def estimator(family, params, seed):
     if family == "elastic_net":
-        return Pipeline([("imputer", SimpleImputer(strategy="median", keep_empty_features=True)),
-                         ("scaler", StandardScaler()),
-                         ("model", ElasticNet(**params, max_iter=10000, tol=1e-5, random_state=seed))])
-    return Pipeline([("imputer", SimpleImputer(strategy="median", keep_empty_features=True)),
-                     ("model", HistGradientBoostingRegressor(**params, max_iter=100, learning_rate=.05,
-                                                             early_stopping=False, random_state=seed))])
-
-
-def metrics(predictions):
-    frame = predictions.filter(pl.col("actual_forward_return_5d").is_not_null())
-    daily = frame.group_by("session_date").agg(
-        pl.corr("actual_forward_return_5d", "predicted_return_5d", method="spearman").alias("ic")).sort("session_date")
-    values = daily["ic"].to_numpy()
-    finite = values[np.isfinite(values)]
-    return {"mae": float(mean_absolute_error(frame["actual_forward_return_5d"], frame["predicted_return_5d"])),
-            "rmse": float(root_mean_squared_error(frame["actual_forward_return_5d"], frame["predicted_return_5d"])),
-            "mean_ic": float(finite.mean()) if len(finite) else None, "ic_dates": len(finite)}, daily
+        return build_elastic_net(params, seed)
+    if family == "gbt":
+        return build_gbt(params, seed)
+    raise ValueError(f"Unsupported model family: {family}")
 
 
 def predict(model, frame, columns, experiment, feature_set):

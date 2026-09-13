@@ -1,4 +1,4 @@
-"""Weekly close T signals, next-session close execution, drifted holdings and costs.
+"""Weekly T+1 execution, drifted holdings and transaction costs.
 
 Trading at T+1 close is a conservative daily-bar convention. Old holdings earn
 the T -> T+1 return; new holdings start earning at T+1 -> T+2. No open-price
@@ -6,16 +6,7 @@ assumption, no same-close fill and no daily rebalancing between weekly trades.
 """
 import numpy as np
 import polars as pl
-
-
-def select_weights(predictions, top_k=10, inverse=False):
-    eligible = predictions.filter(pl.col("predicted_return_5d").is_finite() &
-                                  pl.col("vol_20d").is_finite() & (pl.col("vol_20d") > 0))
-    top = eligible.sort(["predicted_return_5d", "security_id"], descending=[True, False]).head(top_k)
-    if top.is_empty():
-        return {}
-    raw = 1 / top["vol_20d"].to_numpy() if inverse else np.ones(top.height)
-    return dict(zip(top["security_id"].to_list(), raw / raw.sum()))
+from .signals import select_weights
 
 
 def financial_metrics(curve):

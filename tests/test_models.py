@@ -1,5 +1,5 @@
 import numpy as np
-from trading_pipeline.models import estimator
+from trading_pipeline.modelling.training import estimator
 
 
 def test_preprocessing_training_only():
