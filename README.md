@@ -60,7 +60,8 @@ event_based_ml_trading_algo/
 ~~~
 
 The detailed module-to-requirement map is in
-[Architecture and component status](docs/ARCHITECTURE.md).
+[Architecture](docs/ARCHITECTURE.md). Each substantive source package also has a
+concise local README defining its interfaces and ownership boundary.
 
 ## Quickstart
 
@@ -130,7 +131,13 @@ Every full invocation creates a new run ID and preserves previous experiment art
 | [Slice 1 Implementation Plan](docs/planning/CODEX_SLICE1_IMPLEMENTATION_PLAN.md) | Authoritative phased build plan and target repository layout |
 | [Architecture and Component Status](docs/ARCHITECTURE.md) | Actual module ownership, planned-layout conformance, and component status |
 | [Slice 1 Completion Report](docs/SLICE1_COMPLETION_REPORT.md) | Definition-of-Done evidence, reproduction commands, limitations, and stage-gate risks |
+| [Documentation Index](docs/README.md) | Current, generated and future documentation map |
+| [Backlog](docs/BACKLOG.md) | Gated Slice 1 close-out and Slice 2+ roadmap |
+| [Experiment Registry](docs/EXPERIMENT_REGISTRY.md) | Immutable machine IDs and semantic labels |
+| [Glossary](docs/GLOSSARY.md) | Project terminology, metrics and research controls |
+| [Assignment Support](docs/assignment/README.md) | Living paper/presentation material and student-owned reflection prompts |
 | [Implementation Log](docs/IMPLEMENTATION_LOG.md) | Chronological implementation and verification record |
+| [AI Use and Verification](docs/AI_USE_AND_VERIFICATION.md) | Challenges, AI-assisted actions, independent checks and student prompts |
 | [Decisions and Limitations](docs/DECISIONS.md) | Technical choices and explicitly retained limitations |
 | [Planning Index](docs/planning/README.md) | Current and archived planning material |
 
@@ -142,6 +149,8 @@ Every full invocation creates a new run ID and preserves previous experiment art
 - runs/<run_id>/selection.json records validation-only model selection before test scoring.
 - runs/<run_id>/ contains models, predictions, positions, trades, costs, equity curves,
   metrics, plots, manifests, environment metadata, summary, logs, and audit.json.
+- Generated reports are versioned derivatives outside the immutable source run and
+  record the run ID, input hashes, code revision and generation timestamp.
 
 The completed reference run covers 100 equities and passed all persisted-run integrity
 checks. Known research limitations include survivorship bias, retrospective Yahoo

@@ -23,3 +23,16 @@ five sessions after each boundary. Test tail is retained for valuation and exclu
 from label metrics where its five-session label is unavailable. Latest fundamental
 values are selected by filed date, latest fiscal end, shortest duration, accession,
 then value; only USD and USD/shares enter models. Fiscal growth features deferred.
+
+2026-09-13 documentation decision: retain a layered local research application with
+`run.py` as the application-service orchestrator. Package boundaries improve review
+and testing but are not microservices. Reporting and notebooks are read-only derivatives
+of one specified immutable run, with outputs stored separately.
+
+Experiment identifiers E0-E5 and B0 are immutable machine IDs. Human-readable semantic
+labels are joined at presentation time from the registry. Future IDs are append-only;
+completed run data is never retrospectively renamed.
+
+Assignment-support material remains Markdown until generated evidence and the student's
+own interpretation are ready. AI-action records remain factual. First-person reflection,
+understanding, critique and knowledge gaps are student-authored only.

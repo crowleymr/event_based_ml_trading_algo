@@ -74,3 +74,29 @@ hashes and recursive package source hashing.
 Final verification: 20 tests passed in 18.60 seconds. A clean post-review smoke run
 completed at runs/smoke/20260913T014046Z-f9b25e3a; its automatic 17-check audit and
 manual re-audit both passed.
+
+## 2026-09-13 — Documentation close-out and assignment support
+
+Expanded the architecture into a reviewer-oriented current/planned design with exact
+training and inference contracts, application-service boundaries, dependency rules and
+Mermaid workflow/sequence diagrams. Added the gated backlog, stable experiment/model
+registry, glossary, package ownership READMEs and a root evidence policy. Created living
+assignment-support documents for task definition, algorithms, evaluation, paper and
+five-minute presentation structure. Student first-person reflection remains explicitly
+unwritten and is represented only by prompts.
+
+AI-assisted actions in this checkpoint were repository/code/run-contract inspection,
+documentation structuring, code-to-document mapping and consistency/link checks.
+Independent verification consists of direct comparison against source modules, tests,
+the immutable reference metadata/selection/split manifests and automated repository
+checks; no numeric result was inferred from prose and no reference artefact was changed.
+
+### Knowledge-gap register
+
+| Gap or unresolved question | Current evidence | Closure owner/action |
+|---|---|---|
+| Whether engineering evidence satisfies the assignment's research stage gate | Completion report and immutable audit exist | Student/human reviewer decides; AI must not declare success |
+| Strength of conclusions after survivorship and retrospective-adjustment bias | Limitation documented; no PIT constituent/delisting source | Human approves source/policy and a new holdout protocol |
+| Comparable SEC fiscal-period normalization | Exact concepts and filed dates are preserved; durations can differ | Research design before any new feature |
+| Realistic spread, impact, capacity and terminal liquidation assumptions | Fixed 10 bps and marked terminal holdings only | Human-approved policy plus sensitivity implementation |
+| Student's own understanding, critique and remaining gaps | Cannot be evidenced by agent output | Student completes the prompts after review |
