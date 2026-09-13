@@ -100,3 +100,18 @@ checks; no numeric result was inferred from prose and no reference artefact was 
 | Comparable SEC fiscal-period normalization | Exact concepts and filed dates are preserved; durations can differ | Research design before any new feature |
 | Realistic spread, impact, capacity and terminal liquidation assumptions | Fixed 10 bps and marked terminal holdings only | Human-approved policy plus sensitivity implementation |
 | Student's own understanding, critique and remaining gaps | Cannot be evidenced by agent output | Student completes the prompts after review |
+
+## 2026-09-13 — Repeatable coded reporting baseline
+
+Added a read-only reporting command that requires one completed immutable run directory
+and writes a new versioned output directory. It emits paired CSV/Parquet comparison,
+universe, holdings, trades, security contribution, equity/drawdown, turnover/cost, IC,
+metric-definition and deferred-field tables, plus Markdown and provenance JSON. Semantic
+labels are joined beside immutable IDs. Contribution attribution uses prior-day holdings
+and execution-day costs and must reconcile to every source daily return.
+
+Verification covered deterministic derivation, schemas/labels, required-input failure,
+numeric reconciliation to source comparison artefacts, contribution reconciliation,
+versioned-output refusal and the complete regression suite. A read-only build against
+the preserved live reference contract also passed. The notebook now consumes generated
+reports through an explicit portable path; it has not been published.

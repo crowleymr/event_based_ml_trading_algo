@@ -10,6 +10,7 @@ This package is the layered local Slice 1 research application. `run.py` is the 
 | `portfolio` | Ranking-to-weight rules and accounting | Model fitting |
 | `tracking` | Persistence helpers and research plots | Choosing winners |
 | `validation` | Read-only integrity checks | Repairing artefacts |
+| `reporting` | Versioned tables, Markdown and provenance from one run | Training, selection or source-run mutation |
 
 Public operator interfaces are `python -m trading_pipeline.run --config <path>` and `python -m trading_pipeline.audit --run <run-dir>`. Modules exchange explicit Polars tables and JSON-compatible manifests. Configuration validation fixes the five-session horizon, live/synthetic mode and positive cost/top-K values.
 

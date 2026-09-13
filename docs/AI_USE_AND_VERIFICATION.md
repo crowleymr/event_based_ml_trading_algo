@@ -13,7 +13,7 @@ This living register records factual implementation assistance. It is not the st
 | Backtest | Avoid same-close fills and inconsistent cost accounting | Implemented T+1-close execution, drifted holdings and self-financing traded-dollar costs | Accounting/unit tests plus cost/equity reconciliation audit | Verified |
 | Reproducibility | Capture source, data, environment and device evidence | Implemented run-local snapshots, recursive source hashes, seed/thread/device metadata | Two seeded smoke runs, environment tests and 17-check audit | Verified with documented cross-platform limits |
 | Architecture | Broad modules obscured responsibility boundaries | Refactored into data/features/modelling/portfolio/tracking/validation packages | Full test suite, smoke run and separate architecture review | Verified |
-| Documentation/reporting | Avoid manually transcribed or prose-derived evidence | Added evidence policy, registry and coded-report design | Link/schema/registry tests and source reconciliation are required | In progress until reporting checkpoint |
+| Documentation/reporting | Avoid manually transcribed or prose-derived evidence | Added evidence policy, registry and coded report generator | Determinism/schema/failure/reconciliation tests and reference-run read-only build | Verified |
 
 ## Human and AI boundary
 

@@ -47,6 +47,7 @@ event_based_ml_trading_algo/
 │   ├── portfolio/                  # Signals, weighting engines, T+1 backtest
 │   ├── tracking/                   # Run artefacts and plots
 │   ├── validation/                 # Persisted-run leakage and integrity audit
+│   ├── reporting/                  # Read-only versioned report generation
 │   ├── config.py                   # Locked configuration validation
 │   ├── environment.py              # CPU/GPU and reproducibility inventory
 │   ├── audit.py                    # Audit command-line entry point
@@ -120,6 +121,15 @@ To re-audit the completed reference run without retraining:
 .venv/Scripts/python -m trading_pipeline.audit --run runs/20260912T071137Z-9899fd9a
 ~~~
 
+To generate a versioned read-only report from that exact run:
+
+~~~powershell
+.venv/Scripts/python -m trading_pipeline.reporting --run runs/20260912T071137Z-9899fd9a --output reports/20260912T071137Z-9899fd9a/v1
+~~~
+
+The output directory must be new. It contains CSV and Parquet tables, a Markdown
+report and provenance JSON. Reporting never retrains, selects or changes the source run.
+
 Raw caches are not overwritten. Use a new data_dir for a new source-data vintage.
 Every full invocation creates a new run ID and preserves previous experiment artefacts.
 
@@ -138,6 +148,7 @@ Every full invocation creates a new run ID and preserves previous experiment art
 | [Assignment Support](docs/assignment/README.md) | Living paper/presentation material and student-owned reflection prompts |
 | [Implementation Log](docs/IMPLEMENTATION_LOG.md) | Chronological implementation and verification record |
 | [AI Use and Verification](docs/AI_USE_AND_VERIFICATION.md) | Challenges, AI-assisted actions, independent checks and student prompts |
+| [Public Notebook Preparation](docs/PUBLIC_NOTEBOOK.md) | Self-contained generated-report workflow; no publication claim |
 | [Decisions and Limitations](docs/DECISIONS.md) | Technical choices and explicitly retained limitations |
 | [Planning Index](docs/planning/README.md) | Current and archived planning material |
 

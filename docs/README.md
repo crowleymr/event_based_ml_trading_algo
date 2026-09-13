@@ -15,6 +15,7 @@
 | [Experiment registry](EXPERIMENT_REGISTRY.md) | Stable machine IDs, semantic labels and ID rules |
 | [Glossary](GLOSSARY.md) | Stable project vocabulary |
 | [Assignment workspace](assignment/README.md) | Living support; not a final paper/PDF |
+| [Public-notebook preparation](PUBLIC_NOTEBOOK.md) | Portable generated-report path; not published |
 
 ## Generated documentation
 

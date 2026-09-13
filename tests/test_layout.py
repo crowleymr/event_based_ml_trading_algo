@@ -22,6 +22,7 @@ PLANNED_MODULES = [
     "trading_pipeline.portfolio.backtest",
     "trading_pipeline.tracking.artefacts",
     "trading_pipeline.validation.leakage",
+    "trading_pipeline.reporting",
     "trading_pipeline.run",
 ]
 
@@ -32,5 +33,8 @@ def test_planned_modules_are_importable():
 
 
 def test_operator_entry_points_and_documentation_exist():
-    for path in ("README.md", "docs/ARCHITECTURE.md", "notebooks/poc_results.ipynb"):
+    for path in (
+        "README.md", "docs/ARCHITECTURE.md", "docs/BACKLOG.md",
+        "docs/EXPERIMENT_REGISTRY.md", "notebooks/poc_results.ipynb",
+    ):
         assert Path(path).is_file()
