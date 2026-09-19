@@ -1,0 +1,37 @@
+import json
+from pathlib import Path
+
+import polars as pl
+import pytest
+
+from trading_pipeline.dashboard import load_report, load_rl_run
+
+
+def _write_tables(root, names):
+    for name in names:
+        pl.DataFrame({"value": [1]}).write_parquet(root / f"{name}.parquet")
+
+
+def test_report_loader_is_read_only_and_schema_checked(tmp_path):
+    from trading_pipeline.dashboard.loader import REPORT_TABLES
+    _write_tables(tmp_path, REPORT_TABLES)
+    (tmp_path / "provenance.json").write_text(json.dumps({"report_schema_version": 1}), encoding="utf-8")
+    before = {path.name: path.read_bytes() for path in tmp_path.iterdir()}
+    loaded = load_report(tmp_path)
+    assert set(loaded["tables"]) == set(REPORT_TABLES)
+    assert before == {path.name: path.read_bytes() for path in tmp_path.iterdir()}
+    (tmp_path / "provenance.json").write_text(json.dumps({"report_schema_version": 99}), encoding="utf-8")
+    with pytest.raises(ValueError, match="Unsupported"):
+        load_report(tmp_path)
+
+
+def test_rl_loader_requires_complete_audited_exploratory_run(tmp_path):
+    from trading_pipeline.dashboard.loader import RL_TABLES
+    _write_tables(tmp_path, RL_TABLES)
+    metadata = {"status": "complete", "research_status": "exploratory_not_confirmatory"}
+    (tmp_path / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+    (tmp_path / "audit.json").write_text(json.dumps({"passed": True}), encoding="utf-8")
+    assert set(load_rl_run(tmp_path)["tables"]) == set(RL_TABLES)
+    (tmp_path / "audit.json").write_text(json.dumps({"passed": False}), encoding="utf-8")
+    with pytest.raises(ValueError, match="completed, audited"):
+        load_rl_run(tmp_path)
