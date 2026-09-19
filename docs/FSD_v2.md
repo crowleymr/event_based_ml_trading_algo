@@ -203,6 +203,11 @@ Prefer LightGBM/XGBoost if installation is reliable; otherwise sklearn `HistGrad
 
 No neural networks in Slice 1.
 
+### Local hardware and device policy
+The development machine has an NVIDIA RTX 4060 Ti with 16 GB VRAM. GPU use is optional local acceleration, not a POC dependency. Mandatory weekend models (Elastic Net and GBT) remain CPU-first unless GPU acceleration is trivial and stable. If XGBoost/LightGBM GPU support is used, provide a CPU fallback and record any fallback reason.
+
+Use fixed seeds and deterministic/reproducible settings where practical; record settings and any remaining nondeterminism.
+
 ## 13. Mandatory Model/Feature Matrix
 | ID | Features | Model |
 |---|---|---|
@@ -305,7 +310,7 @@ python -m trading_pipeline.run --config configs/poc.yaml
 Filesystem artefact contract is mandatory. MLflow is preferred only if it adds little friction.
 
 ### GitHub Actions
-Weekend target: tests + smoke run + artefact upload. Full 10-year training may remain local.
+Weekend target: tests + smoke run + artefact upload. Full 10-year training may remain local. CI/GitHub Actions must run on CPU without requiring a GPU, CUDA, or GPU-specific dependencies.
 
 ## 23. Run Artefact Contract
 ```text
@@ -327,7 +332,7 @@ runs/<run_id>/
   summary.md
 ```
 
-Metadata includes Git commit, timestamp, model, feature set, portfolio, label horizon, split dates, cost assumption and seed.
+Metadata includes Git commit, timestamp, model, feature set, portfolio, label horizon, split dates, cost assumption and seed. Detect and record CPU/GPU availability (including CPU model/core count and GPU model/VRAM where available), CUDA toolkit/runtime version where installed, relevant package versions, and the actual chosen device per model. Distinguish driver-reported CUDA compatibility from an installed toolkit/runtime; record unavailable or unknown values explicitly. Detection must not fail a CPU-only run. Persist reproducibility settings and any GPU fallback reason.
 
 ## 24. Mandatory Tests
 ### Data
@@ -383,6 +388,8 @@ Choose selectively:
 3. constrained MPT;
 4. RL risk engine;
 5. Australian market expansion.
+
+PyTorch/CUDA may be used for optional neural-network, NLP/FinBERT, sequence-model, or RL experiments after the stage gate. The 16 GB VRAM is sufficient for moderate local inference, fine-tuning and NN experiments, subject to model size, batch size and precision; it does not change the current weekend scope.
 
 No enhancement is required just to make the project look complex.
 

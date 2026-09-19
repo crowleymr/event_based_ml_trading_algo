@@ -46,6 +46,10 @@ Do not implement deferred components until the Definition of Done passes.
 
 GBT: LightGBM/XGBoost if frictionless; otherwise sklearn HistGradientBoostingRegressor.
 
+Development hardware: NVIDIA RTX 4060 Ti with 16 GB VRAM. GPU use is optional local acceleration, not a POC dependency. Keep the mandatory weekend models (Elastic Net and GBT) CPU-first unless GPU acceleration is trivial and stable; any XGBoost/LightGBM GPU path must provide a CPU fallback.
+
+After the stage gate, PyTorch/CUDA may support optional neural-network, NLP/FinBERT, sequence-model, or RL experiments. The 16 GB VRAM is sufficient for moderate local inference, fine-tuning and NN experiments, subject to model size, batch size and precision; it must not expand the weekend scope.
+
 ## 4. Repository Layout
 ```text
 trading-ml-poc/
@@ -100,7 +104,8 @@ trading-ml-poc/
 - config loader;
 - logging;
 - pytest;
-- executable entry point.
+- executable entry point;
+- detect CPU/GPU availability, CPU model/core count and GPU model/VRAM where available, CUDA toolkit/runtime version where installed, and relevant package versions; distinguish driver-reported CUDA compatibility from an installed toolkit/runtime, record unavailable/unknown values explicitly, and never fail a CPU-only run because detection tools or CUDA are absent.
 
 Acceptance:
 ```bash
@@ -205,6 +210,8 @@ Robust tree implementation; no scaling needed.
 
 Hyperparameter budget: <= 8–12 fixed configurations per family on validation only.
 
+Use fixed seeds and deterministic/reproducible settings where practical. Record the actual chosen device per model, reproducibility settings, any remaining nondeterminism, and the reason for any GPU-to-CPU fallback.
+
 ## 16. Phase L — ML Metrics
 Calculate:
 - MAE;
@@ -295,6 +302,8 @@ summary.md
 plots/
 ```
 
+Persist the environment detected in Phase A (CPU/GPU availability, CUDA version and relevant package versions) and the device/reproducibility details from Phase K in `metadata.json` for each run.
+
 Also produce a top-level experiment comparison CSV/Parquet.
 
 ## 23. Phase S — Tracking
@@ -327,7 +336,7 @@ Manual dispatch:
 4. smoke pipeline;
 5. upload smoke artefacts.
 
-Do not make full 10-year research training mandatory on every push.
+Do not make full 10-year research training mandatory on every push. CI/GitHub Actions must run on CPU without requiring a GPU, CUDA, or GPU-specific dependencies.
 
 ## 26. Implementation Log
 Append factual records to `docs/IMPLEMENTATION_LOG.md`:
