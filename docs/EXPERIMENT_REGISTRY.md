@@ -27,6 +27,26 @@ This is the semantic registry for stable machine IDs. Existing artefacts are imm
 
 The reference run parameters are authoritative in its immutable `selection.json`; documentation must not transcribe numeric choices as a substitute for reading that file.
 
+## Phase 2 exploratory selector registry
+
+These IDs are append-only policy identifiers and do not rename or replace E0-E5/B0.
+They first apply to the frozen Phase 2 protocol in `configs/rl_pilot.yaml`.
+
+| ID | Definition | Selection eligibility | Provenance |
+|---|---|---|---|
+| RL0_RANDOM_SELECTOR | Seeded uniform choice among cash and frozen E0-E5 sleeves | Baseline only | Seed and actions in the RL run |
+| RL1_DQN_SELECTOR | Fixed-budget CPU DQN over the registered discrete action space | Exploratory only | Frozen config, all seeds, model and training log in the RL run |
+| RL_B0_ALWAYS_E0 | Always select E0 | Fixed baseline | Frozen E0 weights from the reference run |
+| RL_B1_ALWAYS_E1 | Always select E1 | Fixed baseline | Frozen E1 weights from the reference run |
+| RL_B2_ALWAYS_E2 | Always select E2 | Fixed baseline | Frozen E2 weights from the reference run |
+| RL_B3_ALWAYS_E3 | Always select E3 | Fixed baseline | Frozen E3 weights from the reference run |
+| RL_B4_ALWAYS_E4 | Always select E4 | Fixed baseline | Frozen E4 weights from the reference run |
+| RL_B5_ALWAYS_E5 | Always select E5 | Fixed baseline | Frozen E5 weights from the reference run |
+
+The completed Slice 1 test is already observed. Phase 2 comparisons on it are
+descriptive, never a new selection result. Confirmatory work requires a fresh vintage
+and a predeclared walk-forward protocol.
+
 ## ID formation rules
 
 - A **run ID** is generated once as `YYYYMMDDTHHMMSSZ-<8 lowercase hex>`; it names one immutable execution contract.

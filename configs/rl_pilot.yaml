@@ -1,0 +1,47 @@
+protocol_version: 1
+research_status: exploratory_not_confirmatory
+research_question: Can an RL policy that dynamically selects among frozen, pre-existing portfolio strategies improve after-cost risk-adjusted performance relative to always using any single constituent strategy?
+reference_run: D:/repos/event_based_ml_trading_algo/runs/20260912T071137Z-9899fd9a
+reference_features: D:/repos/event_based_ml_trading_algo/data/features/20260912T071137Z-9899fd9a/features.parquet
+expected_feature_sha256: 83b4d0e3ff45f27d54ecc858a0a7ce695b18cfed218ab6c33af4cef2ce9cd8a3
+output_root: runs/rl
+train_split: validation
+evaluation_split: test
+decision_frequency: weekly_first_observed_session
+execution: action_at_T_filled_at_T_plus_1_close
+reward: weekly_net_log_return_after_reconciled_costs
+cost_bps_one_way: 10
+actions:
+  0: CASH
+  1: E0
+  2: E1
+  3: E2
+  4: E3
+  5: E4
+  6: E5
+observation_fields:
+  - market_return_5d_mean
+  - market_vol_20d_mean
+  - market_dispersion_5d
+  - sleeve_return_5d_E0_to_E5
+  - sleeve_vol_20d_E0_to_E5
+  - prediction_mean_E1_to_E4
+  - prediction_dispersion_E1_to_E4
+  - current_action_one_hot_cash_E0_to_E5
+  - current_cash_weight
+  - current_gross_exposure
+  - previous_turnover
+seeds: [41, 42, 43]
+dqn:
+  total_timesteps: 20000
+  policy: MlpPolicy
+  learning_rate: 0.0001
+  buffer_size: 10000
+  learning_starts: 500
+  batch_size: 64
+  gamma: 0.99
+  train_freq: 4
+  target_update_interval: 500
+  exploration_fraction: 0.2
+  exploration_final_eps: 0.05
+  device: cpu

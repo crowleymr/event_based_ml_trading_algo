@@ -36,3 +36,20 @@ completed run data is never retrospectively renamed.
 Assignment-support material remains Markdown until generated evidence and the student's
 own interpretation are ready. AI-action records remain factual. First-person reflection,
 understanding, critique and knowledge gaps are student-authored only.
+
+2026-09-19 Phase 2 pilot decision: use a discrete portfolio/risk selector over cash
+and the six frozen E0-E5 strategy sleeves. This tests dynamic allocation while keeping
+the existing alpha models, security universe, execution timing and transaction-cost
+accounting fixed. The selector acts after close T and its chosen underlying sleeve
+weights fill at T+1 close. Reward is the next weekly net log return after the canonical
+self-financing one-way costs.
+
+The validation episode is used for fixed-budget DQN training. The already-observed
+Slice 1 test episode is descriptive evaluation only and cannot tune features, reward,
+architecture, budget or parameters. Seeds 41, 42 and 43 and the complete configuration
+are frozen before evaluation; summaries report all seeds and the median, never the best.
+
+Continuous control of 100 security weights with PPO/SAC is deferred. It would expand
+the action space, constraint handling and reward-hacking surface before the discrete
+harness has established basic parity, timing and leakage correctness. Recurrent models,
+GPU tuning and reward/hyperparameter search are also deferred.
