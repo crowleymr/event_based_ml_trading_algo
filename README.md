@@ -130,6 +130,32 @@ To generate a versioned read-only report from that exact run:
 The output directory must be new. It contains CSV and Parquet tables, a Markdown
 report and provenance JSON. Reporting never retrains, selects or changes the source run.
 
+### Run the Phase 2 exploratory selector and dashboard
+
+Install the optional packages separately from the Slice 1 core runtime:
+
+~~~powershell
+.venv/Scripts/python -m pip install -e ".[test,phase2]"
+~~~
+
+Run the frozen CPU-first selector protocol:
+
+~~~powershell
+.venv/Scripts/python -m trading_pipeline.rl.runner --config configs/rl_pilot.yaml
+~~~
+
+Start the read-only dashboard from an existing generated report and optional completed
+RL run:
+
+~~~powershell
+.venv/Scripts/python -m trading_pipeline.dashboard `
+  --report reports/20260912T071137Z-9899fd9a/v1 `
+  --rl-run runs/rl/<run_id>
+~~~
+
+The RL run is exploratory and the completed Slice 1 final test is descriptive only.
+The dashboard never trains, tunes, regenerates reports or modifies source artefacts.
+
 Raw caches are not overwritten. Use a new data_dir for a new source-data vintage.
 Every full invocation creates a new run ID and preserves previous experiment artefacts.
 
@@ -150,6 +176,7 @@ Every full invocation creates a new run ID and preserves previous experiment art
 | [AI Use and Verification](docs/AI_USE_AND_VERIFICATION.md) | Challenges, AI-assisted actions, independent checks and student prompts |
 | [Public Notebook Preparation](docs/PUBLIC_NOTEBOOK.md) | Self-contained generated-report workflow; no publication claim |
 | [Decisions and Limitations](docs/DECISIONS.md) | Technical choices and explicitly retained limitations |
+| [Phase 2 RL Gymnasium Pilot](docs/RL_GYM.md) | Frozen MDP, leakage controls, artefact contract and confirmatory boundary |
 | [Planning Index](docs/planning/README.md) | Current and archived planning material |
 
 ## Outputs and operating notes

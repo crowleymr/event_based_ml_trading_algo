@@ -1,5 +1,28 @@
 # Implementation log
 
+## 2026-09-19 — Phase 2 exploratory selector pilot
+
+- Read the authoritative FSD, implementation plan, decisions, completion evidence,
+  architecture, backlog, registry, reporting implementation/tests and preserved run
+  manifests before changing research behavior.
+- Preserved the user's existing uncommitted hardware-policy edits in the FSD and Slice 1
+  plan; they were not staged with Phase 2 work.
+- Froze action/observation/reward/timing, CPU DQN budget, seeds, dependency groups and
+  stable RL policy IDs before evaluating the descriptive test episode.
+- Added hash-verified dataset preparation, a real-data Gymnasium environment and shared
+  the canonical Slice 1 self-financing rebalance solver.
+- Verified Gymnasium/SB3 compatibility, deterministic seeded transitions, T+1 timing,
+  transaction costs, long-only/no-leverage rules, missing/non-finite failure paths,
+  split isolation, feature-hash enforcement and exact fixed-sleeve parity.
+- Added fixed/random baselines, three fixed-budget CPU DQN seeds and an immutable RL run
+  contract with input snapshots, manifests, models, actions, trades, curves, metrics,
+  action frequencies, audit and generated summary.
+- Added a schema-checked read-only Streamlit dashboard over generated Slice 1 reports and
+  completed audited RL runs. Browser smoke verification rendered overview, equity,
+  drawdown and RL evidence without visible, browser-console or corrected server-log errors.
+- The generated evidence does not support an RL superiority claim. Confirmatory work
+  remains blocked on a fresh data vintage and predeclared walk-forward protocol.
+
 ## 2026-09-12 — Bootstrap
 Read FSD v2 and the complete implementation plan (located in docs/planning).
 Repository initially contained only licence, ignore rules and untracked planning documents.

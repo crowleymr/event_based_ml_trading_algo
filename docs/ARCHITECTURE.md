@@ -135,8 +135,8 @@ Lower layers do not call the application service. Portfolio code receives tables
 | Portfolio/risk | Momentum baseline, equal weight, inverse volatility, SPY B0 | Multiple registered risk/return engines with realistic constraints |
 | Validation | One purged/embargoed chronological holdout | New untouched vintage plus stronger robustness and multiple-testing analysis |
 | Simulation | Weekly T+1 close, fixed cost, no forced terminal liquidation | Spreads/impact, corporate-action/delisting policy and richer execution realism |
-| RL | Not present | Gymnasium environment backed by real PIT-safe observations, actions and costs; only after a design gate |
-| Presentation | Persisted-results notebook; coded reporting is the next layer | Reproducible paper figures/tables and read-only review surface |
+| RL | Exploratory discrete selector over cash/E0-E5; real frozen weights, T+1 fills, shared costs, fixed/random/DQN policies and immutable `runs/rl` contract | Fresh-vintage walk-forward confirmatory protocol; continuous control remains deferred |
+| Presentation | Versioned coded reports plus a read-only Streamlit dashboard over report/RL artefacts | Reproducible paper figures/tables and reviewed assignment narrative |
 | Operations | Local research runs and manual CI workflow | Shadow/paper trading only after research, data and operational gates |
 
 The roadmap is detailed in [BACKLOG.md](BACKLOG.md). Planned items are not claims of implemented capability.
@@ -161,3 +161,27 @@ The roadmap is detailed in [BACKLOG.md](BACKLOG.md). Planned items are not claim
 - Whether/when an RL environment or shadow/paper trading is scientifically and operationally justified.
 
 No pending decision authorises tuning against the completed final-test results.
+
+## Phase 2 exploratory flow
+
+```mermaid
+flowchart LR
+    R[(Immutable Slice 1 run)] --> H[Hash and schema validation]
+    F[(External reference feature file)] --> H
+    H --> S[(Run-local verified input snapshot)]
+    S --> D[Weekly PIT dataset preparation]
+    R --> W[Frozen E0-E5 target weights]
+    W --> G[Gymnasium selector environment]
+    D --> G
+    G --> C[Shared self-financing cost solver]
+    G --> P[Fixed, seeded random and fixed-budget CPU DQN]
+    P --> A[(Immutable runs/rl contract)]
+    R --> Q[(Versioned Slice 1 report)]
+    Q --> UI[Read-only Streamlit dashboard]
+    A --> UI
+```
+
+The RL runner is an explicitly approved, separate Phase 2 research application. It
+does not replace `trading_pipeline.run`, alter Slice 1 artefacts, or provide a second
+path for Slice 1 fitting/selection. The dashboard and reporting package are terminal
+readers. They cannot invoke either runner, regenerate evidence or write into a run.

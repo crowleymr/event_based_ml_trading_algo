@@ -51,9 +51,29 @@ Industry, historical market cap, P/E and similar analyses are deferred because n
 
 Prioritize reproducible reporting and student interpretation first. Then define a new holdout protocol and improve historical-universe and execution realism. Only after those gates should multiple predictive models, risk engines, alternative assets or a real-data Gymnasium RL environment be considered. Shadow/paper trading requires a separate operational-readiness gate.
 
+## Exploratory RL objective versus investment objective
+
+The Phase 2 DQN maximises the sum of weekly net log returns in a historical training
+episode. That reward is deliberately local and additive, and it includes the existing
+one-way transaction cost. It is not identical to the broader investment objective,
+which concerns durable after-cost risk-adjusted performance, drawdown, capacity,
+robustness across regimes and operational safety. A policy can improve cumulative
+training reward while worsening volatility, drawdown or turnover, and a single realised
+path does not identify a stable causal advantage.
+
+Evaluation must therefore show the existing return, volatility, Sharpe, maximum
+drawdown, turnover and cumulative-cost definitions alongside action frequencies and
+variation across seeds. Fixed E0-E5 selectors and a seeded random selector are required
+comparators. The generated Phase 2 summary is evidence, while any explanation of why a
+policy behaved as it did is interpretation. The already-observed test remains descriptive;
+it cannot select the reward, features, architecture, budget or a preferred seed.
+
 ## Student interpretation prompts
 
 - **STUDENT TO COMPLETE:** Explain, in your own words, which metric best answers the research question and why.
 - **STUDENT TO COMPLETE:** Inspect generated validation and test tables. Describe one result that surprised you without using it to tune the system.
 - **STUDENT TO COMPLETE:** Identify the limitation you believe most weakens the conclusion and justify your choice.
 - **STUDENT TO COMPLETE:** Explain what evidence would change your mind about the value of the SEC features.
+- **STUDENT TO COMPLETE:** Explain in your own words why maximising weekly log return is not the same as maximising the full investment objective.
+- **STUDENT TO COMPLETE:** Use the generated RL tables to discuss policy behaviour without claiming superiority or proposing a test-driven repair.
+- **STUDENT TO COMPLETE:** State what fresh-vintage walk-forward evidence would be needed before your conclusion became confirmatory.

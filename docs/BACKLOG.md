@@ -25,7 +25,7 @@ This backlog separates required close-out from possible research expansion. Prio
 | SHOULD | Multiple risk/return engines | G1, common prediction freeze | Same frozen predictions, registered portfolio IDs, constraints and cost accounting | Confounding signal and portfolio effects |
 | COULD | Paper-outline automation | Stable reports | Figures/tables cited by generated IDs; no hand-entered metrics; bibliography/reflection prompts | Mistaking generated prose for student evidence |
 | COULD | Alternative strategies/assets | PIT-safe data, explicit research question, new holdout | Separate strategy/asset IDs, currency/calendar/cost policy and baseline | Data snooping, incomparable assumptions |
-| RESEARCH | Real-data Gymnasium RL environment | G1-G3, approved MDP | PIT-safe observation/action/reward definitions; episode boundaries; realistic costs; baseline parity; deterministic tests | Leakage, reward hacking, non-stationarity, exaggerated complexity |
+| COMPLETE (exploratory) | Real-data Gymnasium RL environment | Approved frozen Phase 2 pilot protocol | Implemented PIT-safe observation/action/reward definitions, split-bounded episodes, shared costs, baseline parity and deterministic checks | Descriptive test is already observed; no confirmatory inference |
 | LATER | Shadow/paper trading | G4 only | Broker sandbox, read-only review first, reconciled market data, alerts, kill switch, audit trail | Operational loss, licences, unreliable live data |
 
 ## Roadmap detail
@@ -40,7 +40,13 @@ Add engines behind the same frozen-prediction boundary so portfolio comparisons 
 
 ### RL environment
 
-A future Gymnasium environment must use real, point-in-time observations and an explicit Markov decision process: observation time, allowed actions, fill timing, transaction costs, reward, termination and train/validation/test episodes. Benchmark it against non-RL engines using the same data and constraints. Synthetic smoke data may test software but cannot establish trading evidence.
+The exploratory Gymnasium environment now uses real, point-in-time observations and an explicit frozen MDP. It benchmarks fixed, random and DQN selectors with the same T+1 convention and shared transaction-cost solver. Synthetic data remains limited to software tests; generated pilot evidence comes from the hash-verified reference vintage.
+
+Remaining RL work is gated: acquire a fresh vintage, generate walk-forward frozen base
+predictions, predeclare rolling training/evaluation windows and preserve a new untouched
+holdout. Only then can confirmatory selection or a superiority claim be considered.
+Continuous 100-security PPO/SAC, recurrent policies, GPU tuning and reward/parameter
+search remain deferred.
 
 ### Backtest realism
 
