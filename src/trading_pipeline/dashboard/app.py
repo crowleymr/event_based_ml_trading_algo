@@ -48,7 +48,7 @@ def main():
             "generated_at": provenance.get("generated_at"),
             "input_hashes": provenance.get("inputs"),
         }, expanded=False)
-        st.dataframe(tables["experiment_comparison"].to_pandas(), use_container_width=True)
+        st.dataframe(tables["experiment_comparison"].to_pandas(), width="stretch")
     with performance:
         series = tables["equity_drawdown_series"].to_pandas()
         split = st.selectbox("Split", sorted(series["split"].unique()), key="performance_split")
@@ -60,16 +60,16 @@ def main():
         st.line_chart(ic, x="session_date", y="ic", color="display_label")
         st.dataframe(tables["experiment_comparison"].select(
             "split", "experiment_id", "display_label", "mae", "rmse", "mean_ic"
-        ).to_pandas(), use_container_width=True)
+        ).to_pandas(), width="stretch")
     with trading:
         costs = tables["turnover_cost_series"].to_pandas()
         st.line_chart(costs, x="session_date", y="cumulative_turnover", color="display_label")
         st.line_chart(costs, x="session_date", y="cumulative_cost", color="display_label")
     with securities:
         st.caption("Generated holdings, trades and reconciled return contributions")
-        st.dataframe(tables["security_holdings_summary"].to_pandas(), use_container_width=True)
-        st.dataframe(tables["security_trades_summary"].to_pandas(), use_container_width=True)
-        st.dataframe(tables["security_contribution_summary"].to_pandas(), use_container_width=True)
+        st.dataframe(tables["security_holdings_summary"].to_pandas(), width="stretch")
+        st.dataframe(tables["security_trades_summary"].to_pandas(), width="stretch")
+        st.dataframe(tables["security_contribution_summary"].to_pandas(), width="stretch")
     with rl_tab:
         st.error("Exploratory pilot — not confirmatory. No RL superiority claim is supported without a fresh vintage and predeclared walk-forward protocol.")
         if not args.rl_run:
@@ -80,12 +80,12 @@ def main():
                 "run_id", "reference_run_id", "code_revision", "generated_at",
                 "seeds", "actual_device", "research_status",
             )}, expanded=False)
-            st.dataframe(rl["policy_summary"].to_pandas(), use_container_width=True)
+            st.dataframe(rl["policy_summary"].to_pandas(), width="stretch")
             curve = rl["equity_curve"].to_pandas()
             curve["policy_seed"] = curve["policy_id"] + " · " + curve["seed"].astype(str)
             st.line_chart(curve, x="session_date", y="equity", color="policy_seed")
-            st.dataframe(rl["action_frequencies"].to_pandas(), use_container_width=True)
-            st.dataframe(rl["metrics"].to_pandas(), use_container_width=True)
+            st.dataframe(rl["action_frequencies"].to_pandas(), width="stretch")
+            st.dataframe(rl["metrics"].to_pandas(), width="stretch")
 
 
 if __name__ == "__main__":

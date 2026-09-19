@@ -23,7 +23,7 @@ class StrategySelectorEnv(gym.Env):
         self.cost_bps = float(cost_bps)
         self.action_space = spaces.Discrete(len(ACTION_IDS))
         size = dataset.base_observations.shape[1] + len(ACTION_IDS) + 3
-        self.observation_space = spaces.Box(-np.inf, np.inf, shape=(size,), dtype=np.float32)
+        self.observation_space = spaces.Box(-1e6, 1e6, shape=(size,), dtype=np.float32)
         self._calendar_index = {day: index for index, day in enumerate(dataset.calendar)}
         self._step = 0
         self._holdings: dict[str, float] = {}
@@ -49,8 +49,8 @@ class StrategySelectorEnv(gym.Env):
             self._turnover,
         ], dtype=np.float32)
         value = np.concatenate([self.dataset.base_observations[self._step], action, state])
-        if not np.isfinite(value).all():
-            raise ValueError("Environment produced a non-finite observation")
+        if not np.isfinite(value).all() or not self.observation_space.contains(value):
+            raise ValueError("Environment produced a non-finite observation or exceeded frozen bounds")
         return value
 
     def reset(self, *, seed=None, options=None):

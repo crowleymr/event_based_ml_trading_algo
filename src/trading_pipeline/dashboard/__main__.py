@@ -14,10 +14,15 @@ def main():
     args = parser.parse_args()
     app = Path(__file__).with_name("app.py")
     command = [sys.executable, "-m", "streamlit", "run", str(app),
-               "--server.port", str(args.port), "--", "--report", args.report]
+               "--server.port", str(args.port),
+               "--browser.gatherUsageStats", "false",
+               "--", "--report", args.report]
     if args.rl_run:
         command += ["--rl-run", args.rl_run]
-    raise SystemExit(subprocess.call(command))
+    try:
+        raise SystemExit(subprocess.call(command))
+    except KeyboardInterrupt:
+        raise SystemExit(0)
 
 
 if __name__ == "__main__":

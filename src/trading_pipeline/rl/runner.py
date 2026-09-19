@@ -27,6 +27,20 @@ def _revision():
         return None
 
 
+def _dirty():
+    try:
+        return bool(subprocess.check_output(["git", "status", "--porcelain"], text=True).strip())
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def _source_hashes():
+    paths = sorted(Path("src/trading_pipeline/rl").glob("*.py")) + [
+        Path("src/trading_pipeline/portfolio/backtest.py")
+    ]
+    return {path.as_posix(): sha256(path) for path in paths}
+
+
 def _run_id():
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex[:8]
 
@@ -149,6 +163,7 @@ def run_pilot(config_path: str | Path, *, skip_dqn: bool = False) -> Path:
     metadata = {
         "run_id": output.name, "status": "complete", "research_status": config["research_status"],
         "generated_at": datetime.now(timezone.utc).isoformat(), "code_revision": _revision(),
+        "code_dirty": _dirty(), "source_sha256": _source_hashes(),
         "reference_run_id": reference.name, "versions": _versions(), "actual_device": "cpu",
         "seeds": config["seeds"], "dqn_skipped": skip_dqn,
     }
@@ -167,7 +182,29 @@ def run_pilot(config_path: str | Path, *, skip_dqn: bool = False) -> Path:
                 "environment_manifest.json", "policy_registry.json", "training_log.parquet",
                 "actions.parquet", "trades.parquet", "equity_curve.parquet", "metrics.parquet",
                 "action_frequencies.parquet", "policy_summary.parquet", "summary.md"]
-    audit = {"checks": {name: (output / name).is_file() for name in required}}
+    model_files = sorted((output / "models").glob("*.zip"))
+    manifest_files = [output / name for name in required] + model_files
+    (output / "artifact_manifest.json").write_text(json.dumps({
+        "files": [{"relative_path": path.relative_to(output).as_posix(),
+                   "sha256": sha256(path), "bytes": path.stat().st_size}
+                  for path in manifest_files],
+    }, indent=2), encoding="utf-8")
+    required.append("artifact_manifest.json")
+    checks = {
+        **{f"file:{name}": (output / name).is_file() for name in required},
+        "feature_snapshot_hash": sha256(snapshot) == config["expected_feature_sha256"],
+        "t_plus_one": actions.filter(pl.col("execution_date") <= pl.col("signal_date")).is_empty(),
+        "costs_nonnegative": actions.filter(pl.col("cost") < 0).is_empty(),
+        "exposure_long_only_no_leverage": actions.filter(
+            (pl.col("gross_exposure") < -1e-12) | (pl.col("gross_exposure") > 1 + 1e-12)
+        ).is_empty(),
+        "metrics_finite": metrics.select(pl.exclude("policy_id")).select(
+            pl.all().is_finite().all()
+        ).row(0) == tuple(True for _ in metrics.select(pl.exclude("policy_id")).columns),
+        "actions_registered": set(actions["action_id"].unique()) <= set(ACTION_IDS.values()),
+        "dqn_models_present": skip_dqn or len(model_files) == len(config["seeds"]),
+    }
+    audit = {"checks": checks}
     audit["passed"] = all(audit["checks"].values())
     (output / "audit.json").write_text(json.dumps(audit, indent=2), encoding="utf-8")
     if not audit["passed"]:
