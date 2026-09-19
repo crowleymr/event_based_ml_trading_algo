@@ -9,13 +9,49 @@ import polars as pl
 from .signals import select_weights
 
 
-def financial_metrics(curve):
+def solve_rebalance(before, holdings, target, cost_bps):
+    """Solve the canonical self-financing, one-way-cost rebalance."""
+    if not np.isfinite(before) or before <= 0:
+        raise ValueError("Pre-trade equity must be positive and finite")
+    if any(not np.isfinite(value) or value < 0 for value in holdings.values()):
+        raise ValueError("Holdings must be finite and long-only")
+    if any(not np.isfinite(weight) or weight < 0 for weight in target.values()):
+        raise ValueError("Target weights must be finite and long-only")
+    if sum(target.values()) > 1 + 1e-12:
+        raise ValueError("Target weights cannot exceed one; leverage is forbidden")
+    rate = cost_bps / 10000
+    names = sorted(set(holdings) | set(target))
+    after = before
+    for _ in range(50):
+        cost = rate * sum(
+            abs(target.get(name, 0.0) * after - holdings.get(name, 0.0))
+            for name in names
+        )
+        updated = before - cost
+        if abs(updated - after) < 1e-14:
+            after = updated
+            break
+        after = updated
+    dollars = {
+        name: target.get(name, 0.0) * after - holdings.get(name, 0.0)
+        for name in names
+    }
+    cost = rate * sum(abs(value) for value in dollars.values())
+    turnover = sum(abs(value) for value in dollars.values()) / before
+    post_holdings = {
+        name: weight * after for name, weight in target.items() if weight > 0
+    }
+    cash = before - cost - sum(post_holdings.values())
+    return post_holdings, cash, turnover, cost, dollars
+
+
+def financial_metrics(curve, periods_per_year=252):
     r = curve["daily_return"].to_numpy()
     equity = curve["equity"].to_numpy()
-    vol = float(np.std(r, ddof=1) * np.sqrt(252)) if len(r) > 1 else 0.
+    vol = float(np.std(r, ddof=1) * np.sqrt(periods_per_year)) if len(r) > 1 else 0.
     drawdown = equity / np.maximum.accumulate(np.r_[1., equity])[1:] - 1
-    return {"total_return": float(equity[-1] - 1), "annualised_return": float(equity[-1] ** (252 / len(r)) - 1),
-            "annualised_volatility": vol, "sharpe": float(np.mean(r) * 252 / vol) if vol else None,
+    return {"total_return": float(equity[-1] - 1), "annualised_return": float(equity[-1] ** (periods_per_year / len(r)) - 1),
+            "annualised_volatility": vol, "sharpe": float(np.mean(r) * periods_per_year / vol) if vol else None,
             "maximum_drawdown": float(drawdown.min()), "average_turnover": float(curve["turnover"].mean()),
             "total_turnover": float(curve["turnover"].sum()),
             "cumulative_transaction_cost": float(curve["cost"].sum()), "sessions": len(r)}
@@ -46,7 +82,6 @@ def backtest(predictions, bars, experiment, split, top_k=10, cost_bps=10, invers
               for r in bars.filter(pl.col("session_date").is_between(start, end)).select("session_date", "security_id", "adjusted_close").to_dicts()}
     holdings, last_price, cash, previous_equity = {}, {}, 1., 1.
     curves, positions, trades = [], [], []
-    rate = cost_bps / 10000
     for day in dates:
         for security, value in list(holdings.items()):
             if value == 0:
@@ -65,25 +100,14 @@ def backtest(predictions, bars, experiment, split, top_k=10, cost_bps=10, invers
             for security in target:
                 if (day, security) not in prices:
                     raise ValueError(f"Selected security has no T+1 execution bar: {security} {day}")
-            names = sorted(set(holdings) | set(target))
-            # Solve post-cost NAV = pre-cost NAV - bps * actual dollars traded.
-            after = before
-            for _ in range(50):
-                cost = rate * sum(abs(target.get(s, 0.) * after - holdings.get(s, 0.)) for s in names)
-                updated = before - cost
-                if abs(updated - after) < 1e-14:
-                    after = updated
-                    break
-                after = updated
-            dollars = {s: target.get(s, 0.) * after - holdings.get(s, 0.) for s in names}
-            cost = rate * sum(abs(v) for v in dollars.values())
-            turnover = sum(abs(v) for v in dollars.values()) / before
+            holdings, cash, turnover, cost, dollars = solve_rebalance(
+                before, holdings, target, cost_bps
+            )
+            rate = cost_bps / 10000
             for s, amount in dollars.items():
                 trades.append(dict(experiment=experiment, split=split, signal_date=signal_day, execution_date=day,
                                    security_id=s, trade_value=amount, turnover=abs(amount) / before,
                                    cost=abs(amount) * rate))
-            holdings = {s: w * after for s, w in target.items()}
-            cash = before - cost - sum(holdings.values())
             last_price = {s: prices[(day, s)] for s in holdings}
         equity = cash + sum(holdings.values())
         for s, value in holdings.items():

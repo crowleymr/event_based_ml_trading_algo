@@ -2,7 +2,7 @@ from datetime import date, timedelta
 import numpy as np
 import polars as pl
 import pytest
-from trading_pipeline.portfolio import select_weights, backtest
+from trading_pipeline.portfolio import select_weights, backtest, solve_rebalance
 
 
 def fixture():
@@ -54,3 +54,13 @@ def test_buy_hold_trades_once():
     p, bars = fixture()
     _, _, trades = backtest(p, bars, "B0", "test", top_k=1, buy_hold=True)
     assert trades.height == 1
+
+
+def test_shared_rebalance_solver_is_long_only_and_reconciled():
+    holdings, cash, turnover, cost, dollars = solve_rebalance(
+        1.0, {}, {"a": 0.6, "b": 0.4}, 10
+    )
+    assert sum(holdings.values()) + cash == pytest.approx(1 - cost)
+    assert turnover == pytest.approx(sum(abs(value) for value in dollars.values()))
+    with pytest.raises(ValueError, match="leverage"):
+        solve_rebalance(1.0, {}, {"a": 1.01}, 10)
