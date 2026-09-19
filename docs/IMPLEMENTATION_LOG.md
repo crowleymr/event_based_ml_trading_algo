@@ -1,5 +1,19 @@
 # Implementation log
 
+## 2026-09-19 — Local Phase 2 integration verification
+
+Preserved the local FSD and Slice 1 plan hardware/reproducibility edits in a dedicated
+commit, then applied the six completed Phase 2 commits to local `main` in their original
+order without conflicts. Copied the named ignored RL run into the local checkout and
+verified all 24 copied files against the source by relative path, byte count and SHA-256;
+the run's 17-entry artefact manifest and every persisted audit check also passed.
+
+Installed the optional Phase 2 dependency group and reran the complete suite: 32 tests
+passed. A focused RL, reproducibility and dashboard run passed 9 tests. The read-only
+dashboard loaded the existing generated Slice 1 report and audited RL run, and its health
+and page endpoints returned HTTP 200. No remote, stash, existing report or source run was
+modified.
+
 ## 2026-09-19 — Phase 2 exploratory selector pilot
 
 - Read the authoritative FSD, implementation plan, decisions, completion evidence,
