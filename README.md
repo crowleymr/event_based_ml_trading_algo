@@ -162,7 +162,7 @@ RL run:
 
 ~~~powershell
 .venv/Scripts/python -m trading_pipeline.dashboard `
-  --report reports/20260912T071137Z-9899fd9a/v2 `
+  --report reports/20260912T071137Z-9899fd9a/v3 `
   --rl-run runs/rl/<run_id>
 ~~~
 

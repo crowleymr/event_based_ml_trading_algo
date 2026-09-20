@@ -85,7 +85,30 @@ def _training_callback(run_id, seed, requested_device, actual_device, started, r
     from stable_baselines3.common.callbacks import BaseCallback
 
     class TelemetryCallback(BaseCallback):
+        def __init__(self):
+            super().__init__(verbose=0)
+            self.episode_reward = 0.0
+
         def _on_step(self) -> bool:
+            rewards = self.locals.get("rewards")
+            dones = self.locals.get("dones")
+            if rewards is not None:
+                self.episode_reward += float(np.asarray(rewards).reshape(-1)[0])
+            if dones is not None and bool(np.asarray(dones).reshape(-1)[0]):
+                rows.append({
+                    "schema_version": TELEMETRY_SCHEMA_VERSION,
+                    "run_id": run_id, "experiment_id": None,
+                    "policy_id": "RL1_DQN_SELECTOR", "model_family": "DQN",
+                    "seed": seed, "requested_device": requested_device,
+                    "actual_device": actual_device, "phase": "training",
+                    "step": self.num_timesteps, "epoch": None,
+                    "metric_name": "rollout/episode_reward",
+                    "metric_value": self.episode_reward,
+                    "elapsed_seconds": time.perf_counter() - started,
+                    "learning_rate": float(self.model.lr_schedule(1.0)),
+                    "timestamp": utc_now(),
+                })
+                self.episode_reward = 0.0
             if self.num_timesteps % 250:
                 return True
             values = dict(getattr(self.logger, "name_to_value", {}))
@@ -114,7 +137,7 @@ def _training_callback(run_id, seed, requested_device, actual_device, started, r
                 })
             return True
 
-    return TelemetryCallback(verbose=0)
+    return TelemetryCallback()
 
 
 def _benchmark_dqn(DQN, train_data, evaluation_data, config, devices):

@@ -9,13 +9,13 @@
   peak-memory evidence. Added a standalone tensor-placement preflight.
 - Installed the optional official CUDA 12.8 PyTorch wheel locally; CUDA preflight placed
   the tensor on the detected RTX 4060 Ti.
-- Ran the frozen-budget three-seed DQN diagnostic reproduction as
-  `runs/rl/20260920T000735Z-eb113246`. Its persisted audit passed. Device timing and
+- Ran the final frozen-budget three-seed DQN diagnostic reproduction as
+  `runs/rl/20260920T002714Z-9c9692fc`. Its persisted audit passed. Device timing and
   parity evidence is generated in `device_benchmark.parquet`; per-seed durations and
   devices are generated in `training_summary.parquet`. No timing or observed-test result
   was used for selection.
-- Generated report schema v2 at
-  `reports/20260912T071137Z-9899fd9a/v2` from the immutable Slice 1 run, its hash-verified
+- Generated report schema v2 in versioned output
+  `reports/20260912T071137Z-9899fd9a/v3` from the immutable Slice 1 run, its hash-verified
   external feature snapshot and the completed audited diagnostic RL run. The report
   emits paired CSV/Parquet evidence and field-level definitions, units, limitations and
   provenance without modifying source artefacts.
