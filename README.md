@@ -144,12 +144,25 @@ Run the frozen CPU-first selector protocol:
 .venv/Scripts/python -m trading_pipeline.rl.runner --config configs/rl_pilot.yaml
 ~~~
 
+The v2 protocol accepts `cpu`, `cuda`, or `auto`. CUDA remains optional and is not a
+CI dependency. For a local CUDA 12.8 environment, install the official wheel separately
+and verify actual tensor placement before a run:
+
+~~~powershell
+.venv/Scripts/python -m pip install --force-reinstall torch==2.11.0+cu128 --index-url https://download.pytorch.org/whl/cu128
+.venv/Scripts/python -m trading_pipeline.rl.device --device auto
+~~~
+
+`auto` records the requested and actual device and falls back safely to CPU with an
+explicit reason. Each new RL run emits schema-versioned training traces/summaries and a
+short CPU/GPU timing diagnostic. These diagnostics never select a device, model or seed.
+
 Start the read-only dashboard from an existing generated report and optional completed
 RL run:
 
 ~~~powershell
 .venv/Scripts/python -m trading_pipeline.dashboard `
-  --report reports/20260912T071137Z-9899fd9a/v1 `
+  --report reports/20260912T071137Z-9899fd9a/v2 `
   --rl-run runs/rl/<run_id>
 ~~~
 

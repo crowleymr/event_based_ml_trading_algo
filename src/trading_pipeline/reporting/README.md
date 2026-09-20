@@ -3,13 +3,19 @@
 This package is a read-only presentation adapter for one specified immutable run. Run:
 
 ```powershell
-python -m trading_pipeline.reporting --run runs/<run_id> --output reports/<run_id>/v1
+python -m trading_pipeline.reporting --run runs/<run_id> --rl-run runs/rl/<run_id> --output reports/<run_id>/v2
 ```
 
 It validates the required contract, joins stable semantic labels, derives comparison,
 universe, security holdings/trades/contribution summaries and equity/drawdown,
-turnover/cost and IC series, metric definitions/units and an explicit deferred-field
-register, then writes CSV, Parquet, Markdown and provenance JSON.
+turnover/cost and IC series, split/feature/target profiles, prediction and decile
+diagnostics, semantic feature importance, SPY-relative evidence, training telemetry or
+explicit not-recorded states, field definitions/units/limitations/provenance and an
+explicit deferred-field register, then writes CSV, Parquet, Markdown and provenance JSON.
+
+The feature snapshot is external to the immutable Slice 1 run directory, so v2 requires
+the path and SHA-256 frozen in `dataset_manifest.json`. An optional RL input must be
+complete and audited; its input files are hashed into report provenance.
 
 The output directory must not already exist. Corrections are made in source code/data
 and regenerated into a new version, never patched in place. The module does not fit,

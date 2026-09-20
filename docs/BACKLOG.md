@@ -26,6 +26,7 @@ This backlog separates required close-out from possible research expansion. Prio
 | COULD | Paper-outline automation | Stable reports | Figures/tables cited by generated IDs; no hand-entered metrics; bibliography/reflection prompts | Mistaking generated prose for student evidence |
 | COULD | Alternative strategies/assets | PIT-safe data, explicit research question, new holdout | Separate strategy/asset IDs, currency/calendar/cost policy and baseline | Data snooping, incomparable assumptions |
 | COMPLETE (exploratory) | Real-data Gymnasium RL environment | Approved frozen Phase 2 pilot protocol | Implemented PIT-safe observation/action/reward definitions, split-bounded episodes, shared costs, baseline parity and deterministic checks | Descriptive test is already observed; no confirmatory inference |
+| COMPLETE (diagnostic) | Unified report/dashboard and RL telemetry | Immutable Slice 1 run, audited RL contract | Report schema v2, seven-view read-only dashboard, common telemetry, explicit device/fallback evidence and CPU/GPU timing diagnostic | Telemetry must not become post-test selection evidence |
 | LATER | Shadow/paper trading | G4 only | Broker sandbox, read-only review first, reconciled market data, alerts, kill switch, audit trail | Operational loss, licences, unreliable live data |
 
 ## Roadmap detail

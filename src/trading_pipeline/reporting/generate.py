@@ -8,14 +8,17 @@ from pathlib import Path
 import hashlib
 import json
 import math
+import numpy as np
 import subprocess
 
 import polars as pl
 
 from trading_pipeline.data.schemas import digest
+from trading_pipeline.features import F0, F1
+from trading_pipeline.tracking.telemetry import TRACE_SCHEMA, SUMMARY_SCHEMA
 from .registry import registry
 
-REPORT_SCHEMA_VERSION = 1
+REPORT_SCHEMA_VERSION = 2
 
 REQUIRED = (
     "metadata.json",
@@ -29,6 +32,7 @@ REQUIRED = (
     "trades.parquet",
     "daily_ic.parquet",
     "predictions.parquet",
+    "feature_importance.parquet",
     "datasets/security_master.parquet",
     "datasets/market_bars.parquet",
     "datasets/fundamental_facts.parquet",
@@ -46,6 +50,12 @@ METRICS = {
     "mae": ("Mean absolute five-session return prediction error", "decimal return"),
     "rmse": ("Root mean squared five-session return prediction error", "decimal return"),
     "mean_ic": ("Mean finite daily cross-sectional Spearman rank correlation", "dimensionless"),
+    "directional_accuracy": ("Share of predictions with the same sign as realised five-session return", "decimal fraction"),
+    "active_return": ("Strategy daily return minus SPY daily return on the same session", "decimal return"),
+    "tracking_error": ("Sample standard deviation of daily active return times sqrt(252)", "decimal fraction per year"),
+    "information_ratio": ("Annualised mean active return divided by annualised tracking error", "dimensionless"),
+    "beta": ("Sample covariance of strategy and SPY daily returns divided by SPY variance", "dimensionless"),
+    "downside_capture": ("Mean strategy return on negative-SPY sessions divided by mean SPY return on those sessions", "ratio"),
 }
 
 
@@ -66,6 +76,14 @@ def _validate_run(root: Path) -> dict:
 
 
 def _labels(frame: pl.DataFrame, labels: dict, id_column: str) -> pl.DataFrame:
+    if frame.is_empty():
+        renamed = frame.rename({id_column: "experiment_id"})
+        return renamed.with_columns(*[
+            pl.lit(None, dtype=pl.String).alias(name) for name in (
+                "display_label", "feature_set_label", "estimator_label",
+                "portfolio_label", "selection_role",
+            )
+        ])
     ids = set(frame[id_column].unique().to_list())
     unknown = ids - set(labels)
     if unknown:
@@ -301,7 +319,248 @@ def _series(root: Path, labels: dict) -> dict[str, pl.DataFrame]:
     }
 
 
-def build_report(root: str | Path) -> tuple[dict[str, pl.DataFrame], str, dict]:
+def _feature_snapshot(root: Path) -> tuple[pl.DataFrame, dict]:
+    manifest = _load_json(root / "dataset_manifest.json")
+    path = Path(manifest["feature_path"]).resolve()
+    expected = manifest["feature_sha256"]
+    if not path.is_file() or digest(path) != expected:
+        raise ValueError("Hash-verified feature snapshot is unavailable or differs from the run manifest")
+    return pl.read_parquet(path), {
+        "path": str(path), "sha256": expected, "role": "external_hash_verified_feature_snapshot"
+    }
+
+
+def _data_diagnostics(features: pl.DataFrame) -> dict[str, pl.DataFrame]:
+    usable = features.filter(pl.col("split").is_in(["train", "validation", "test"]))
+    split_profile = usable.group_by("split").agg(
+        pl.len().alias("rows"), pl.col("security_id").n_unique().alias("securities"),
+        pl.col("session_date").n_unique().alias("dates"),
+        pl.col("session_date").min().alias("start_date"),
+        pl.col("session_date").max().alias("end_date"),
+        pl.col("forward_return_5d").is_not_null().sum().alias("target_available_rows"),
+        pl.col("forward_return_5d").is_null().sum().alias("target_unavailable_rows"),
+    ).sort("split")
+    rows = []
+    for split in ("train", "validation", "test"):
+        frame = usable.filter(pl.col("split") == split)
+        for name in list(dict.fromkeys(F0 + F1)):
+            values = frame[name]
+            rows.append({
+                "split": split, "feature": name,
+                "semantic_label": name.replace("_", " ").title(),
+                "rows": frame.height, "missing_count": values.null_count(),
+                "missing_fraction": values.null_count() / frame.height if frame.height else None,
+                "minimum": values.min(), "q05": values.quantile(.05),
+                "q25": values.quantile(.25), "median": values.median(),
+                "q75": values.quantile(.75), "q95": values.quantile(.95),
+                "maximum": values.max(),
+            })
+    feature_summary = pl.DataFrame(rows).sort(["split", "feature"])
+    target_summary = usable.group_by("split").agg(
+        pl.col("forward_return_5d").count().alias("available_rows"),
+        pl.col("forward_return_5d").null_count().alias("missing_rows"),
+        pl.col("forward_return_5d").mean().alias("mean"),
+        pl.col("forward_return_5d").std().alias("standard_deviation"),
+        pl.col("forward_return_5d").quantile(.05).alias("q05"),
+        pl.col("forward_return_5d").quantile(.25).alias("q25"),
+        pl.col("forward_return_5d").median().alias("median"),
+        pl.col("forward_return_5d").quantile(.75).alias("q75"),
+        pl.col("forward_return_5d").quantile(.95).alias("q95"),
+    ).sort("split")
+    return {"split_profile": split_profile, "feature_summary": feature_summary,
+            "target_summary": target_summary}
+
+
+def _prediction_diagnostics(root: Path, labels: dict) -> dict[str, pl.DataFrame]:
+    predictions = pl.read_parquet(root / "predictions.parquet").filter(
+        pl.col("actual_forward_return_5d").is_not_null()
+    ).with_columns(
+        (pl.col("predicted_return_5d") - pl.col("actual_forward_return_5d")).alias("residual"),
+        (pl.col("predicted_return_5d").sign() == pl.col("actual_forward_return_5d").sign()).alias("direction_correct"),
+        pl.len().over(["model_id", "split", "session_date"]).alias("cross_section_rows"),
+    ).with_columns(
+        (((pl.col("predicted_rank") - 1) * 10 / pl.col("cross_section_rows")).floor() + 1)
+        .clip(1, 10).cast(pl.Int8).alias("prediction_decile")
+    )
+    residual = predictions.group_by("model_id", "split").agg(
+        pl.len().alias("rows"), pl.col("residual").mean().alias("mean_residual"),
+        pl.col("residual").std().alias("residual_standard_deviation"),
+        pl.col("residual").quantile(.05).alias("residual_q05"),
+        pl.col("residual").median().alias("residual_median"),
+        pl.col("residual").quantile(.95).alias("residual_q95"),
+        pl.col("residual").abs().mean().alias("mae"),
+        (pl.col("residual").pow(2).mean().sqrt()).alias("rmse"),
+        pl.col("direction_correct").mean().alias("directional_accuracy"),
+    ).rename({"model_id": "experiment"})
+    deciles = predictions.group_by("model_id", "split", "prediction_decile").agg(
+        pl.len().alias("rows"),
+        pl.col("predicted_return_5d").mean().alias("mean_prediction"),
+        pl.col("actual_forward_return_5d").mean().alias("mean_realised_return"),
+        pl.col("residual").mean().alias("mean_residual"),
+        pl.col("direction_correct").mean().alias("directional_accuracy"),
+    ).rename({"model_id": "experiment"})
+    return {
+        "prediction_diagnostics": _labels(residual, labels, "experiment").sort(["split", "experiment_id"]),
+        "prediction_deciles": _labels(deciles, labels, "experiment").sort(["split", "experiment_id", "prediction_decile"]),
+    }
+
+
+def _feature_importance(root: Path, labels: dict) -> pl.DataFrame:
+    value = pl.read_parquet(root / "feature_importance.parquet").rename({"model_id": "experiment"})
+    return _labels(value, labels, "experiment").with_columns(
+        pl.col("feature").str.replace_all("_", " ").str.to_titlecase().alias("semantic_label")
+    ).sort(["experiment_id", "importance"], descending=[False, True])
+
+
+def _benchmark_relative(root: Path, labels: dict) -> dict[str, pl.DataFrame]:
+    curves = pl.read_parquet(root / "equity_curve.parquet").sort(["split", "experiment", "session_date"])
+    rows, metric_rows = [], []
+    for split in curves["split"].unique().sort().to_list():
+        benchmark = curves.filter((pl.col("split") == split) & (pl.col("experiment") == "B0")).select(
+            "session_date", pl.col("daily_return").alias("benchmark_return"),
+            pl.col("equity").alias("benchmark_equity")
+        )
+        if benchmark.is_empty():
+            continue
+        for experiment in curves.filter(pl.col("split") == split)["experiment"].unique().sort().to_list():
+            if experiment == "B0":
+                continue
+            joined = curves.filter(
+                (pl.col("split") == split) & (pl.col("experiment") == experiment)
+            ).join(benchmark, on="session_date", how="inner").with_columns(
+                (pl.col("daily_return") - pl.col("benchmark_return")).alias("active_return"),
+                (pl.col("equity") / pl.col("benchmark_equity") - 1).alias("relative_return"),
+            ).with_columns(
+                (pl.col("active_return").rolling_std(63) * math.sqrt(252)).alias("rolling_63d_tracking_error")
+            )
+            active, strategy, bench = joined["active_return"], joined["daily_return"], joined["benchmark_return"]
+            te = active.std() * math.sqrt(252) if active.len() > 1 else None
+            strategy_values, benchmark_values = strategy.to_numpy(), bench.to_numpy()
+            benchmark_variance = float(np.var(benchmark_values, ddof=1)) if len(benchmark_values) > 1 else None
+            beta = (
+                float(np.cov(strategy_values, benchmark_values, ddof=1)[0, 1]) / benchmark_variance
+                if benchmark_variance not in (None, 0) else None
+            )
+            downside = joined.filter(pl.col("benchmark_return") < 0)
+            down_bench = downside["benchmark_return"].mean() if downside.height else None
+            metric_rows.append({
+                "split": split, "experiment": experiment,
+                "annualised_active_return": active.mean() * 252,
+                "tracking_error": te,
+                "information_ratio": active.mean() * 252 / te if te else None,
+                "beta": beta,
+                "downside_capture": downside["daily_return"].mean() / down_bench if down_bench else None,
+                "sessions": joined.height,
+            })
+            rows.append(joined.select(
+                pl.lit(experiment).alias("experiment"), "split", "session_date",
+                pl.col("daily_return").alias("strategy_return"), "benchmark_return",
+                "active_return", "relative_return", "rolling_63d_tracking_error"
+            ))
+    series = pl.concat(rows) if rows else pl.DataFrame(schema={
+        "experiment": pl.String, "split": pl.String, "session_date": pl.Date,
+        "strategy_return": pl.Float64, "benchmark_return": pl.Float64,
+        "active_return": pl.Float64, "relative_return": pl.Float64,
+        "rolling_63d_tracking_error": pl.Float64,
+    })
+    metrics = pl.DataFrame(metric_rows) if metric_rows else pl.DataFrame(schema={
+        "split": pl.String, "experiment": pl.String,
+        "annualised_active_return": pl.Float64, "tracking_error": pl.Float64,
+        "information_ratio": pl.Float64, "beta": pl.Float64,
+        "downside_capture": pl.Float64, "sessions": pl.Int64,
+    })
+    return {
+        "benchmark_relative_series": _labels(series, labels, "experiment").sort(["split", "experiment_id", "session_date"]),
+        "benchmark_relative_metrics": _labels(metrics, labels, "experiment").sort(["split", "experiment_id"]),
+    }
+
+
+def _training_tables(root: Path) -> dict[str, pl.DataFrame]:
+    trace_path, summary_path = root / "training_trace.parquet", root / "training_summary.parquet"
+    trace = pl.read_parquet(trace_path) if trace_path.is_file() else pl.DataFrame(schema=TRACE_SCHEMA)
+    summary = pl.read_parquet(summary_path) if summary_path.is_file() else pl.DataFrame(schema=SUMMARY_SCHEMA)
+    availability = pl.DataFrame([
+        {"model_family": "Elastic Net", "state": "not recorded for this run",
+         "reason": "The immutable Slice 1 run predates training telemetry; Elastic Net has iterations, not epochs."},
+        {"model_family": "Histogram GBT", "state": "not recorded for this run",
+         "reason": "The immutable Slice 1 run predates staged training telemetry."},
+    ]) if summary.is_empty() else pl.DataFrame([
+        {"model_family": family, "state": "recorded", "reason": None}
+        for family in summary["model_family"].unique().sort().to_list()
+    ])
+    return {"training_trace": trace, "training_summary": summary,
+            "training_availability": availability}
+
+
+def _rl_tables(rl_root: Path | None) -> tuple[dict[str, pl.DataFrame], list[dict]]:
+    names = ("actions", "equity_curve", "metrics", "policy_summary", "action_frequencies",
+             "training_trace", "training_summary", "device_benchmark")
+    if rl_root is None:
+        return {}, []
+    metadata = _load_json(rl_root / "metadata.json")
+    audit = _load_json(rl_root / "audit.json")
+    if metadata.get("status") != "complete" or not audit.get("passed"):
+        raise ValueError("RL report input must be completed and audited")
+    tables = {f"rl_{name}": pl.read_parquet(rl_root / f"{name}.parquet") for name in names}
+    inputs = [{"path": str(rl_root / f"{name}.parquet"), "sha256": digest(rl_root / f"{name}.parquet"),
+               "role": "audited_rl_evidence"} for name in names]
+    inputs += [{"path": str(rl_root / name), "sha256": digest(rl_root / name), "role": "audited_rl_contract"}
+               for name in ("metadata.json", "audit.json")]
+    return tables, inputs
+
+
+def _field_definitions(tables: dict[str, pl.DataFrame]) -> pl.DataFrame:
+    precise = {
+        "residual": "Predicted five-session return minus realised five-session return",
+        "prediction_decile": "Within-date predicted-rank bucket; 1 is the highest predicted-return decile",
+        "directional_accuracy": METRICS["directional_accuracy"][0],
+        "active_return": METRICS["active_return"][0],
+        "relative_return": "Strategy equity divided by SPY equity minus one",
+        "rolling_63d_tracking_error": "63-session sample standard deviation of active return times sqrt(252)",
+        "tracking_error": METRICS["tracking_error"][0],
+        "information_ratio": METRICS["information_ratio"][0],
+        "beta": METRICS["beta"][0],
+        "downside_capture": METRICS["downside_capture"][0],
+        "metric_value": "Recorded value emitted by the named training metric; unavailable values are omitted",
+        "peak_gpu_memory_bytes": "Peak allocated PyTorch CUDA memory during this fit, when CUDA executed",
+    }
+    rows = []
+    for table in (
+        "split_profile", "feature_summary", "target_summary", "prediction_diagnostics",
+        "prediction_deciles", "feature_importance", "benchmark_relative_series",
+        "benchmark_relative_metrics", "training_trace", "training_summary",
+    ):
+        for field in tables[table].columns:
+            unit = "identifier/text"
+            if any(token in field for token in ("return", "accuracy", "missing_fraction", "drawdown")):
+                unit = "decimal fraction"
+            elif field.endswith("_seconds"):
+                unit = "seconds"
+            elif field.endswith("_bytes"):
+                unit = "bytes"
+            elif field in {"rows", "dates", "securities", "step", "epoch", "iterations", "epochs"} or field.endswith("_rows"):
+                unit = "count"
+            elif tables[table].schema[field].is_numeric():
+                unit = "numeric; see definition"
+            rows.append({
+                "table": table, "field": field,
+                "definition": precise.get(field, field.replace("_", " ").capitalize()),
+                "unit": unit,
+                "limitations": (
+                    "Descriptive diagnostic; the observed final test cannot be used for model selection"
+                    if table in {"prediction_diagnostics", "prediction_deciles", "benchmark_relative_series", "benchmark_relative_metrics"}
+                    else "Unavailable source values remain null and are never estimated"
+                ),
+                "provenance": (
+                    "Hash-verified external feature snapshot named by dataset_manifest.json"
+                    if table in {"split_profile", "feature_summary", "target_summary"}
+                    else "Immutable source run artefacts and deterministic report code"
+                ),
+            })
+    return pl.DataFrame(rows).sort(["table", "field"])
+
+
+def build_report(root: str | Path, rl_run: str | Path | None = None) -> tuple[dict[str, pl.DataFrame], str, dict]:
     """Derive deterministic tables and Markdown without writing to the source run."""
     root = Path(root).resolve()
     metadata = _validate_run(root)
@@ -309,6 +568,8 @@ def build_report(root: str | Path) -> tuple[dict[str, pl.DataFrame], str, dict]:
     labels = registry(selection)
     universe, universe_security = _universe_tables(root)
     holdings, trades = _security_summaries(root, labels)
+    features, feature_dependency = _feature_snapshot(root)
+    rl_tables, rl_inputs = _rl_tables(Path(rl_run).resolve() if rl_run else None)
     tables = {
         "experiment_comparison": _experiment_comparison(root, selection, labels),
         "metric_definitions": pl.DataFrame([
@@ -320,6 +581,7 @@ def build_report(root: str | Path) -> tuple[dict[str, pl.DataFrame], str, dict]:
         "security_holdings_summary": holdings,
         "security_trades_summary": trades,
         "security_contribution_summary": _contributions(root, labels),
+        "feature_importance": _feature_importance(root, labels),
         "deferred_fields": pl.DataFrame([
             {
                 "field": name,
@@ -329,7 +591,13 @@ def build_report(root: str | Path) -> tuple[dict[str, pl.DataFrame], str, dict]:
             for name in ("industry", "historical_market_cap", "price_to_earnings")
         ]),
         **_series(root, labels),
+        **_data_diagnostics(features),
+        **_prediction_diagnostics(root, labels),
+        **_benchmark_relative(root, labels),
+        **_training_tables(root),
+        **rl_tables,
     }
+    tables["field_definitions"] = _field_definitions(tables)
     report = _markdown(metadata, selection, tables)
     provenance = {
         "report_schema_version": REPORT_SCHEMA_VERSION,
@@ -342,7 +610,7 @@ def build_report(root: str | Path) -> tuple[dict[str, pl.DataFrame], str, dict]:
         ] + (
             [{"relative_path": "datasets/benchmark.parquet", "sha256": digest(root / "datasets/benchmark.parquet")}]
             if (root / "datasets/benchmark.parquet").is_file() else []
-        ),
+        ) + [feature_dependency] + rl_inputs,
     }
     return tables, report, provenance
 
@@ -357,7 +625,7 @@ def _markdown(metadata: dict, selection: dict, tables: dict[str, pl.DataFrame]) 
     universe = tables["universe_summary"].row(0, named=True)
     comparison = tables["experiment_comparison"]
     lines = [
-        "# Versioned Slice 1 report",
+        "# Versioned evidence report",
         "",
         f"Source run: `{metadata['run_id']}`. Report schema: v{REPORT_SCHEMA_VERSION}.",
         "",
@@ -396,6 +664,11 @@ def _markdown(metadata: dict, selection: dict, tables: dict[str, pl.DataFrame]) 
         "- `universe_summary` and `universe_security_summary`: source coverage without unavailable classifications.",
         "- `security_holdings_summary`, `security_trades_summary` and `security_contribution_summary`: defensible security-level aggregates. Net contribution is prior-day holding return less execution-day cost, reconciled to daily portfolio returns.",
         "- `equity_drawdown_series`, `turnover_cost_series` and `ic_series`: chart-ready time series.",
+        "- `split_profile`, `feature_summary` and `target_summary`: hash-verified train/validation/test coverage and distributions.",
+        "- `prediction_diagnostics`, `prediction_deciles` and `feature_importance`: error, ranking behavior and semantic model diagnostics.",
+        "- `benchmark_relative_series` and `benchmark_relative_metrics`: same-session SPY-relative evidence with explicitly defined risk measures.",
+        "- `training_trace`, `training_summary` and `training_availability`: recorded telemetry or explicit not-recorded states; no history is reconstructed.",
+        "- `field_definitions`: definitions, units, limitations and provenance for every v2 diagnostic field.",
         "",
         "## Metric definitions and units",
         "",
@@ -432,7 +705,7 @@ def _code_revision() -> tuple[str | None, bool | None]:
         return None, None
 
 
-def generate_report(root: str | Path, output: str | Path) -> Path:
+def generate_report(root: str | Path, output: str | Path, rl_run: str | Path | None = None) -> Path:
     """Create a new versioned output directory; never mutate the source run."""
     source = Path(root).resolve()
     output = Path(output).resolve()
@@ -440,7 +713,7 @@ def generate_report(root: str | Path, output: str | Path) -> Path:
         raise ValueError("Report output must be outside the immutable source run")
     if output.exists():
         raise FileExistsError(f"Report output already exists: {output}")
-    tables, report, provenance = build_report(source)
+    tables, report, provenance = build_report(source, rl_run=rl_run)
     output.mkdir(parents=True, exist_ok=False)
     try:
         for name, frame in tables.items():

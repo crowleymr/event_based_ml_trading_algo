@@ -185,3 +185,10 @@ The RL runner is an explicitly approved, separate Phase 2 research application. 
 does not replace `trading_pipeline.run`, alter Slice 1 artefacts, or provide a second
 path for Slice 1 fitting/selection. The dashboard and reporting package are terminal
 readers. They cannot invoke either runner, regenerate evidence or write into a run.
+
+Protocol v2 adds `tracking/telemetry.py` as the common, schema-versioned training trace
+and summary contract. The RL runner resolves `cpu`/`cuda`/`auto`, records safe fallback
+and writes immutable telemetry. Report schema v2 hashes the external feature snapshot
+named by the source manifest and may ingest an already completed, audited RL run. The
+Streamlit application remains a terminal read-only adapter with seven evidence views;
+it never imports a training entry point.

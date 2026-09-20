@@ -35,7 +35,7 @@ They first apply to the frozen Phase 2 protocol in `configs/rl_pilot.yaml`.
 | ID | Definition | Selection eligibility | Provenance |
 |---|---|---|---|
 | RL0_RANDOM_SELECTOR | Seeded uniform choice among cash and frozen E0-E5 sleeves | Baseline only | Seed and actions in the RL run |
-| RL1_DQN_SELECTOR | Fixed-budget CPU DQN over the registered discrete action space | Exploratory only | Frozen config, all seeds, model and training log in the RL run |
+| RL1_DQN_SELECTOR | Fixed-budget DQN over the registered discrete action space; protocol v1 CPU, v2 explicit cpu/cuda/auto | Exploratory/diagnostic only | Frozen config, all seeds, requested/actual device, model and schema-versioned telemetry in the RL run |
 | RL_B0_ALWAYS_E0 | Always select E0 | Fixed baseline | Frozen E0 weights from the reference run |
 | RL_B1_ALWAYS_E1 | Always select E1 | Fixed baseline | Frozen E1 weights from the reference run |
 | RL_B2_ALWAYS_E2 | Always select E2 | Fixed baseline | Frozen E2 weights from the reference run |
@@ -46,6 +46,11 @@ They first apply to the frozen Phase 2 protocol in `configs/rl_pilot.yaml`.
 The completed Slice 1 test is already observed. Phase 2 comparisons on it are
 descriptive, never a new selection result. Confirmatory work requires a fresh vintage
 and a predeclared walk-forward protocol.
+
+Protocol v2 reruns retain the same `RL1_DQN_SELECTOR` policy because the model and
+research role are unchanged; execution device is provenance, not a new candidate.
+They carry `diagnostic_reproduction_not_model_selection` and cannot be used to prefer
+GPU, CPU, a seed, or any model setting.
 
 ## ID formation rules
 

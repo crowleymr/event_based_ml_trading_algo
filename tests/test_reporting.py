@@ -24,6 +24,12 @@ def test_report_derivation_is_deterministic(report_run):
     assert first_markdown == second_markdown
     assert first_provenance == second_provenance
     assert {"metric", "definition", "unit"} == set(first_tables["metric_definitions"].columns)
+    assert {"table", "field", "definition", "unit", "limitations", "provenance"} == set(
+        first_tables["field_definitions"].columns
+    )
+    assert {"split_profile", "feature_summary", "target_summary", "prediction_diagnostics",
+            "prediction_deciles", "feature_importance", "benchmark_relative_series",
+            "benchmark_relative_metrics", "training_trace", "training_summary"} <= set(first_tables)
     assert set(first_tables["deferred_fields"]["status"]) == {"blocked/deferred"}
 
 
@@ -42,6 +48,9 @@ def test_report_schema_labels_and_source_reconciliation(report_run):
     assert comparison.select(numeric).equals(source.select(numeric))
     assert "Final-test results are descriptive" in markdown
     assert provenance["source_run_id"] == report_run.name
+    assert provenance["report_schema_version"] == 2
+    assert any(item.get("role") == "external_hash_verified_feature_snapshot"
+               for item in provenance["inputs"])
     assert len(provenance["inputs"]) >= 13
 
 

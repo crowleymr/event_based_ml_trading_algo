@@ -1,5 +1,35 @@
 # Implementation log
 
+## 2026-09-20 — Unified evidence dashboard and CUDA telemetry diagnostic
+
+- Preserved the user-owned `docs/planning/prompt-scratch_pad.md` edit and all existing
+  immutable data, run and report artefacts.
+- Added the common schema-versioned training trace/summary contract and explicit
+  `cpu`/`cuda`/`auto` resolution with recorded fallback, determinism, package/CUDA and
+  peak-memory evidence. Added a standalone tensor-placement preflight.
+- Installed the optional official CUDA 12.8 PyTorch wheel locally; CUDA preflight placed
+  the tensor on the detected RTX 4060 Ti.
+- Ran the frozen-budget three-seed DQN diagnostic reproduction as
+  `runs/rl/20260920T000735Z-eb113246`. Its persisted audit passed. Device timing and
+  parity evidence is generated in `device_benchmark.parquet`; per-seed durations and
+  devices are generated in `training_summary.parquet`. No timing or observed-test result
+  was used for selection.
+- Generated report schema v2 at
+  `reports/20260912T071137Z-9899fd9a/v2` from the immutable Slice 1 run, its hash-verified
+  external feature snapshot and the completed audited diagnostic RL run. The report
+  emits paired CSV/Parquet evidence and field-level definitions, units, limitations and
+  provenance without modifying source artefacts.
+- Expanded the read-only Streamlit surface into seven evidence views. In-process page
+  execution had no application exceptions; local health and page endpoints returned
+  successfully. Streamlit did not invoke a training or report-generation path.
+- Verification command: `.venv/Scripts/python -m pytest -q`; the complete suite passed.
+  The canonical Slice 1 persisted-run audit passed, and the prior RL run and report v1
+  matched their stored manifests/hashes.
+
+This is diagnostic reproduction evidence only. The observed final test remains
+descriptive; confirmatory selection still requires a fresh data vintage and predeclared
+walk-forward protocol.
+
 ## 2026-09-19 — Local Phase 2 integration verification
 
 Preserved the local FSD and Slice 1 plan hardware/reproducibility edits in a dedicated

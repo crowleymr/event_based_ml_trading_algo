@@ -53,3 +53,17 @@ Continuous control of 100 security weights with PPO/SAC is deferred. It would ex
 the action space, constraint handling and reward-hacking surface before the discrete
 harness has established basic parity, timing and leakage correctness. Recurrent models,
 GPU tuning and reward/hyperparameter search are also deferred.
+
+2026-09-20 diagnostic reproduction decision: protocol v2 retains the frozen MDP,
+features, actions, reward, budget, seeds and descriptive test boundary, while permitting
+`cpu`, `cuda` or `auto` execution. Device availability is an engineering concern, not a
+selection criterion. `auto` records requested/actual device and falls back to CPU with a
+reason. A short CPU/GPU DQN timing comparison is diagnostic only; it cannot choose a
+device, architecture, parameter or seed. All observed-test reruns are labelled
+`diagnostic_reproduction_not_model_selection`.
+
+Common training telemetry is schema-versioned and records only values exposed reliably
+by the fitted library. Missing histories are reported as not recorded. In particular,
+Elastic Net has solver iterations and convergence diagnostics rather than epochs, and no
+synthetic epoch loss curve may be created. Report schema v2 remains a read-only,
+hash-backed derivative and may embed only a completed audited RL run.

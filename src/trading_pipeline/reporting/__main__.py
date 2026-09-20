@@ -11,6 +11,7 @@ def main() -> None:
         description="Generate versioned read-only reports from one immutable run directory."
     )
     parser.add_argument("--run", required=True, help="Exact runs/<run_id> directory")
+    parser.add_argument("--rl-run", help="Optional completed audited RL run to embed")
     parser.add_argument(
         "--output",
         help="New output directory; defaults to reports/<run_id>/v1",
@@ -18,7 +19,7 @@ def main() -> None:
     args = parser.parse_args()
     run = Path(args.run)
     output = Path(args.output) if args.output else Path("reports") / run.name / "v1"
-    print(generate_report(run, output))
+    print(generate_report(run, output, rl_run=args.rl_run))
 
 
 if __name__ == "__main__":

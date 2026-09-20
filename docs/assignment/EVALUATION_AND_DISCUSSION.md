@@ -8,6 +8,16 @@ The same predictions feed weekly top-10 portfolio construction. The backtest use
 
 ## What each result answers
 
+Keep the objectives distinct. Elastic Net solver iterations/convergence are not an
+epoch loss curve. Supervised MAE/RMSE measure forecast error, while daily IC measures
+cross-sectional ranking. DQN optimizer loss is an internal learning diagnostic; episode
+reward is the frozen weekly net-log-return control objective; realised after-cost
+portfolio performance is a separate descriptive outcome. GPU timing/parity is
+engineering evidence, not evidence of financial or model superiority.
+
+All evidence on the already observed Slice 1 test is descriptive. Confirmatory work
+requires a fresh vintage, predeclared walk-forward protocol and untouched final holdout.
+
 | Evidence | Question | Unit/interpretation |
 |---|---|---|
 | MAE | Typical absolute prediction error | Decimal return |

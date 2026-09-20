@@ -13,16 +13,25 @@ def _write_tables(root, names):
 
 
 def test_report_loader_is_read_only_and_schema_checked(tmp_path):
-    from trading_pipeline.dashboard.loader import REPORT_TABLES
-    _write_tables(tmp_path, REPORT_TABLES)
+    from trading_pipeline.dashboard.loader import REPORT_TABLES_V1
+    _write_tables(tmp_path, REPORT_TABLES_V1)
     (tmp_path / "provenance.json").write_text(json.dumps({"report_schema_version": 1}), encoding="utf-8")
     before = {path.name: path.read_bytes() for path in tmp_path.iterdir()}
     loaded = load_report(tmp_path)
-    assert set(loaded["tables"]) == set(REPORT_TABLES)
+    assert set(loaded["tables"]) == set(REPORT_TABLES_V1)
     assert before == {path.name: path.read_bytes() for path in tmp_path.iterdir()}
     (tmp_path / "provenance.json").write_text(json.dumps({"report_schema_version": 99}), encoding="utf-8")
     with pytest.raises(ValueError, match="Unsupported"):
         load_report(tmp_path)
+
+
+def test_report_v2_loader_requires_expanded_contract(tmp_path):
+    from trading_pipeline.dashboard.loader import REPORT_TABLES
+    _write_tables(tmp_path, REPORT_TABLES)
+    (tmp_path / "provenance.json").write_text(
+        json.dumps({"report_schema_version": 2}), encoding="utf-8"
+    )
+    assert set(load_report(tmp_path)["tables"]) == set(REPORT_TABLES)
 
 
 def test_rl_loader_requires_complete_audited_exploratory_run(tmp_path):
