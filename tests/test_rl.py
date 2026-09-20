@@ -11,6 +11,10 @@ from stable_baselines3.common.env_checker import check_env as sb3_check_env
 
 from trading_pipeline.rl.dataset import PilotDataset, prepare_dataset
 from trading_pipeline.rl.environment import StrategySelectorEnv
+from trading_pipeline.rl.device import preflight, resolve_device
+from trading_pipeline.tracking.telemetry import (
+    TRACE_SCHEMA, SUMMARY_SCHEMA, frame, validate_summary, validate_trace,
+)
 
 
 def tiny_dataset(missing=False):
@@ -97,3 +101,29 @@ def test_real_dataset_hash_boundaries_and_fixed_sleeve_parity():
 def test_feature_hash_mismatch_fails():
     with pytest.raises(ValueError, match="SHA-256"):
         prepare_dataset(REFERENCE, FEATURES, "0" * 64, "validation")
+
+
+def test_device_preflight_places_tensor_and_invalid_device_fails():
+    result = preflight("cpu")
+    assert result["passed"]
+    assert result["requested_device"] == result["actual_device"] == "cpu"
+    assert result["tensor_device"] == "cpu"
+    with pytest.raises(ValueError, match="device must be"):
+        resolve_device("quantum")
+
+
+def test_common_training_telemetry_schemas_are_stable_and_fail_fast():
+    trace = frame([], TRACE_SCHEMA)
+    summary = frame([], SUMMARY_SCHEMA)
+    validate_trace(trace)
+    validate_summary(summary)
+    bad = trace.vstack(frame([{
+        "schema_version": 1, "run_id": "r", "experiment_id": None,
+        "policy_id": "p", "model_family": "DQN", "seed": 1,
+        "requested_device": "cpu", "actual_device": "cpu", "phase": "training",
+        "step": 1, "epoch": None, "metric_name": "loss", "metric_value": float("nan"),
+        "elapsed_seconds": 1.0, "learning_rate": None,
+        "timestamp": __import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+    }], TRACE_SCHEMA))
+    with pytest.raises(ValueError, match="finite"):
+        validate_trace(bad)

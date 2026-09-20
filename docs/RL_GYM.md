@@ -64,12 +64,28 @@ paths over the common episode interval, which tests the timing and accounting br
 
 - `RL_B0_ALWAYS_E0` through `RL_B5_ALWAYS_E5`: fixed sleeve baselines;
 - `RL0_RANDOM_SELECTOR`: seeded uniform random selector;
-- `RL1_DQN_SELECTOR`: one CPU MLP DQN configuration, 20,000 steps, seeds 41/42/43.
+- `RL1_DQN_SELECTOR`: one MLP DQN configuration, 20,000 steps, seeds 41/42/43;
+  protocol v2 permits explicit CPU/CUDA execution without changing the candidate.
 
 There is no parameter or reward search. Evaluation actions for DQN are deterministic.
 All seeds are retained and the median seed is reported; the best seed is never selected.
 Metrics use the existing financial definitions with 52 weekly periods per year, and add
 reward sum, action frequencies and across-seed evidence.
+
+## Protocol v2 execution telemetry
+
+The DQN config accepts `cpu`, `cuda` or `auto`. The runner records requested and actual
+device, fallback reason, PyTorch/CUDA/cuDNN versions, fixed seeds, determinism settings,
+duration and peak allocated GPU memory. It emits a common long-form training trace and
+one training summary per seed. Callback values include only reliably exposed DQN loss,
+exploration, episode reward and learning-rate observations; unavailable values are not
+estimated. Descriptive evaluation reward is labelled separately from training metrics.
+
+A fixed 512-step CPU/GPU diagnostic records elapsed time and evaluation reward using the
+same environment and seed. It is a hardware timing/parity check, not a selector. Small
+MLPs may be faster on CPU because transfer and kernel-launch overhead dominate. CUDA
+reproducibility can still vary with GPU, driver, runtime and kernel implementation even
+with fixed seeds and deterministic algorithms requested.
 
 ## Limitations and confirmatory next step
 

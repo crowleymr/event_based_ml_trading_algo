@@ -12,6 +12,12 @@ Install and run from the repository root:
 .venv/Scripts/python -m trading_pipeline.rl.runner --config configs/rl_pilot.yaml
 ```
 
+Protocol v2 accepts `cpu`, `cuda`, or `auto`, records requested/actual device and any
+fallback reason, and writes common `training_trace.parquet`, `training_summary.parquet`
+and a short `device_benchmark.parquet`. Check the installed build and actual tensor
+placement with `python -m trading_pipeline.rl.device --device auto`.
+
 Use `--skip-dqn` only when the optional ML stack cannot be installed or the fixed
 training budget exceeds the stop condition. Outputs are new immutable directories
-under `runs/rl/`; the reference run and source feature file remain untouched.
+under `runs/rl/`; the reference run and source feature file remain untouched. Reruns on
+the observed test must be labelled `diagnostic_reproduction_not_model_selection`.

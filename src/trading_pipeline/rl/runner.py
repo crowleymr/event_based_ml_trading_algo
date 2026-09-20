@@ -8,6 +8,7 @@ from pathlib import Path
 import json
 import shutil
 import subprocess
+import time
 import uuid
 
 import numpy as np
@@ -18,6 +19,10 @@ from .dataset import prepare_dataset, sha256
 from .environment import StrategySelectorEnv
 from .policies import evaluate, fixed_action, model_action, random_action
 from .protocol import ACTION_IDS, POLICY_IDS, load_protocol
+from .device import resolve_device
+from trading_pipeline.tracking.telemetry import (
+    TELEMETRY_SCHEMA_VERSION, utc_now, write_training_telemetry,
+)
 
 
 def _revision():
@@ -56,10 +61,98 @@ def _versions():
     }
 
 
+def _determinism(seed: int, actual_device: str) -> dict:
+    import torch
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if actual_device == "cuda":
+        torch.cuda.manual_seed_all(seed)
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    return {
+        "seed": seed,
+        "torch_deterministic_algorithms": True,
+        "cudnn_deterministic": bool(torch.backends.cudnn.deterministic),
+        "cudnn_benchmark": bool(torch.backends.cudnn.benchmark),
+        "remaining_nondeterminism": (
+            "CUDA kernels and library versions may still vary across hardware/runtime builds"
+            if actual_device == "cuda" else
+            "CPU numerical results may vary across library builds and instruction sets"
+        ),
+    }
+
+
+def _training_callback(run_id, seed, requested_device, actual_device, started, rows):
+    from stable_baselines3.common.callbacks import BaseCallback
+
+    class TelemetryCallback(BaseCallback):
+        def _on_step(self) -> bool:
+            if self.num_timesteps % 250:
+                return True
+            values = dict(getattr(self.logger, "name_to_value", {}))
+            values.setdefault("rollout/exploration_rate", float(self.model.exploration_rate))
+            for name in ("train/loss", "rollout/exploration_rate", "rollout/ep_rew_mean"):
+                value = values.get(name)
+                if value is None:
+                    continue
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if not np.isfinite(value):
+                    continue
+                rows.append({
+                    "schema_version": TELEMETRY_SCHEMA_VERSION,
+                    "run_id": run_id, "experiment_id": None,
+                    "policy_id": "RL1_DQN_SELECTOR", "model_family": "DQN",
+                    "seed": seed, "requested_device": requested_device,
+                    "actual_device": actual_device, "phase": "training",
+                    "step": self.num_timesteps, "epoch": None,
+                    "metric_name": name, "metric_value": value,
+                    "elapsed_seconds": time.perf_counter() - started,
+                    "learning_rate": float(self.model.lr_schedule(1.0)),
+                    "timestamp": utc_now(),
+                })
+            return True
+
+    return TelemetryCallback(verbose=0)
+
+
+def _benchmark_dqn(DQN, train_data, evaluation_data, config, devices):
+    """Short fixed-budget timing/parity diagnostic; never used for selection."""
+    rows = []
+    base = dict(config["dqn"])
+    base.pop("total_timesteps")
+    policy = base.pop("policy")
+    base.pop("device", None)
+    steps = min(512, int(config["dqn"]["total_timesteps"]))
+    base["learning_starts"] = min(int(base.get("learning_starts", 0)), 64)
+    base["buffer_size"] = max(512, min(int(base.get("buffer_size", 10000)), 2048))
+    for device in devices:
+        started = time.perf_counter()
+        model = DQN(policy, StrategySelectorEnv(train_data, config["cost_bps_one_way"]),
+                    seed=int(config["seeds"][0]), verbose=0, device=device, **base)
+        model.learn(total_timesteps=steps, progress_bar=False)
+        duration = time.perf_counter() - started
+        _, _, metrics = evaluate(
+            StrategySelectorEnv(evaluation_data, config["cost_bps_one_way"]),
+            model_action(model), "RL1_DQN_SELECTOR", int(config["seeds"][0])
+        )
+        rows.append({
+            "benchmark_kind": "short_dqn_diagnostic_not_model_selection",
+            "requested_device": device, "actual_device": str(model.device),
+            "steps": steps, "duration_seconds": duration,
+            "steps_per_second": steps / duration,
+            "evaluation_reward_sum": metrics["reward_sum"],
+            "seed": int(config["seeds"][0]),
+        })
+    return pl.DataFrame(rows)
+
+
 def run_pilot(config_path: str | Path, *, skip_dqn: bool = False) -> Path:
     config_path = Path(config_path).resolve()
     config = load_protocol(config_path)
     output = Path(config["output_root"]).resolve() / _run_id()
+    run_id = output.name
     if output.exists():
         raise FileExistsError(output)
     output.mkdir(parents=True)
@@ -79,7 +172,10 @@ def run_pilot(config_path: str | Path, *, skip_dqn: bool = False) -> Path:
 
     train_data = prepare_dataset(reference, snapshot, config["expected_feature_sha256"], config["train_split"])
     evaluation_data = prepare_dataset(reference, snapshot, config["expected_feature_sha256"], config["evaluation_split"])
+    device = resolve_device(config["dqn"].get("device", "cpu"))
+    requested_device, actual_device = device["requested_device"], device["actual_device"]
     all_actions, all_curves, all_metrics, training_rows = [], [], [], []
+    trace_rows, summary_rows = [], []
     evaluation_env = lambda: StrategySelectorEnv(evaluation_data, config["cost_bps_one_way"])
     for index in range(6):
         policy_id = f"RL_B{index}_ALWAYS_E{index}"
@@ -95,10 +191,23 @@ def run_pilot(config_path: str | Path, *, skip_dqn: bool = False) -> Path:
         from stable_baselines3 import DQN
         params = dict(config["dqn"])
         timesteps, policy = params.pop("total_timesteps"), params.pop("policy")
+        params["device"] = actual_device
+        benchmark_devices = ["cpu"] + (["cuda"] if device["cuda_available"] else [])
+        benchmark = _benchmark_dqn(DQN, train_data, evaluation_data, config, benchmark_devices)
+        benchmark.write_parquet(output / "device_benchmark.parquet")
         for seed in config["seeds"]:
+            import torch
+            settings = _determinism(seed, actual_device)
+            if actual_device == "cuda":
+                torch.cuda.reset_peak_memory_stats()
+            started_at, started = utc_now(), time.perf_counter()
             model = DQN(policy, StrategySelectorEnv(train_data, config["cost_bps_one_way"]),
                         seed=seed, verbose=0, **params)
-            model.learn(total_timesteps=timesteps, progress_bar=False)
+            callback = _training_callback(
+                run_id, seed, requested_device, actual_device, started, trace_rows
+            )
+            model.learn(total_timesteps=timesteps, progress_bar=False, callback=callback)
+            duration, completed_at = time.perf_counter() - started, utc_now()
             model_path = output / "models" / f"RL1_DQN_SELECTOR_seed_{seed}"
             model.save(model_path)
             actions, curve, metrics = evaluate(
@@ -110,6 +219,44 @@ def run_pilot(config_path: str | Path, *, skip_dqn: bool = False) -> Path:
                 "total_timesteps": timesteps, "actual_device": str(model.device),
                 "model_path": f"models/{model_path.name}.zip",
             })
+            trace_rows.append({
+                "schema_version": TELEMETRY_SCHEMA_VERSION, "run_id": run_id,
+                "experiment_id": None, "policy_id": "RL1_DQN_SELECTOR",
+                "model_family": "DQN", "seed": seed,
+                "requested_device": requested_device, "actual_device": actual_device,
+                "phase": "descriptive_evaluation", "step": timesteps, "epoch": None,
+                "metric_name": "evaluation/reward_sum",
+                "metric_value": float(metrics["reward_sum"]),
+                "elapsed_seconds": duration, "learning_rate": float(params["learning_rate"]),
+                "timestamp": completed_at,
+            })
+            summary_rows.append({
+                "schema_version": TELEMETRY_SCHEMA_VERSION, "run_id": run_id,
+                "experiment_id": None, "policy_id": "RL1_DQN_SELECTOR",
+                "model_family": "DQN", "seed": seed,
+                "requested_device": requested_device, "actual_device": actual_device,
+                "fallback_reason": device["fallback_reason"], "duration_seconds": duration,
+                "data_rows": len(train_data.signal_dates),
+                "data_columns": int(train_data.base_observations.shape[1]),
+                "iterations": timesteps, "epochs": None,
+                "stopping_reason": "fixed_predeclared_timestep_budget_reached",
+                "peak_gpu_memory_bytes": (
+                    int(torch.cuda.max_memory_allocated()) if actual_device == "cuda" else None
+                ),
+                "package_versions_json": json.dumps(_versions(), sort_keys=True),
+                "cuda_versions_json": json.dumps(device, sort_keys=True),
+                "determinism_json": json.dumps(settings, sort_keys=True),
+                "started_at": started_at, "completed_at": completed_at,
+            })
+    else:
+        pl.DataFrame(schema={
+            "benchmark_kind": pl.String, "requested_device": pl.String,
+            "actual_device": pl.String, "steps": pl.Int64,
+            "duration_seconds": pl.Float64, "steps_per_second": pl.Float64,
+            "evaluation_reward_sum": pl.Float64, "seed": pl.Int64,
+        }).write_parquet(output / "device_benchmark.parquet")
+
+    write_training_telemetry(output, trace_rows, summary_rows)
 
     actions = pl.concat(all_actions)
     curves = pl.concat(all_curves)
@@ -164,7 +311,10 @@ def run_pilot(config_path: str | Path, *, skip_dqn: bool = False) -> Path:
         "run_id": output.name, "status": "complete", "research_status": config["research_status"],
         "generated_at": datetime.now(timezone.utc).isoformat(), "code_revision": _revision(),
         "code_dirty": _dirty(), "source_sha256": _source_hashes(),
-        "reference_run_id": reference.name, "versions": _versions(), "actual_device": "cpu",
+        "reference_run_id": reference.name, "versions": _versions(),
+        "requested_device": requested_device, "actual_device": actual_device,
+        "device_fallback_reason": device["fallback_reason"], "device_preflight": device,
+        "telemetry_schema_version": TELEMETRY_SCHEMA_VERSION,
         "seeds": config["seeds"], "dqn_skipped": skip_dqn,
     }
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
@@ -180,6 +330,7 @@ def run_pilot(config_path: str | Path, *, skip_dqn: bool = False) -> Path:
     (output / "summary.md").write_text("\n".join(summary_lines), encoding="utf-8")
     required = ["config.yaml", "metadata.json", "input_manifest.json", "split_manifest.json",
                 "environment_manifest.json", "policy_registry.json", "training_log.parquet",
+                "training_trace.parquet", "training_summary.parquet", "device_benchmark.parquet",
                 "actions.parquet", "trades.parquet", "equity_curve.parquet", "metrics.parquet",
                 "action_frequencies.parquet", "policy_summary.parquet", "summary.md"]
     model_files = sorted((output / "models").glob("*.zip"))
@@ -203,6 +354,7 @@ def run_pilot(config_path: str | Path, *, skip_dqn: bool = False) -> Path:
         ).row(0) == tuple(True for _ in metrics.select(pl.exclude("policy_id")).columns),
         "actions_registered": set(actions["action_id"].unique()) <= set(ACTION_IDS.values()),
         "dqn_models_present": skip_dqn or len(model_files) == len(config["seeds"]),
+        "telemetry_present": skip_dqn or len(summary_rows) == len(config["seeds"]),
     }
     audit = {"checks": checks}
     audit["passed"] = all(audit["checks"].values())

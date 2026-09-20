@@ -1,5 +1,5 @@
-protocol_version: 1
-research_status: exploratory_not_confirmatory
+protocol_version: 2
+research_status: diagnostic_reproduction_not_model_selection
 research_question: Can an RL policy that dynamically selects among frozen, pre-existing portfolio strategies improve after-cost risk-adjusted performance relative to always using any single constituent strategy?
 reference_run: D:/repos/event_based_ml_trading_algo/runs/20260912T071137Z-9899fd9a
 reference_features: D:/repos/event_based_ml_trading_algo/data/features/20260912T071137Z-9899fd9a/features.parquet
@@ -44,4 +44,4 @@ dqn:
   target_update_interval: 500
   exploration_fraction: 0.2
   exploration_final_eps: 0.05
-  device: cpu
+  device: auto
