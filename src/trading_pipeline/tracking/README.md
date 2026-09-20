@@ -5,3 +5,10 @@ Owns generic JSON persistence, consumed-input hashing and static research-plot g
 Inputs are completed in-memory tables, configuration and explicit paths. Outputs belong to a new run directory. The application service decides what to persist and in what sequence.
 
 Tracking must not select models, recompute research policy, scrape prose or mutate a completed run. Paths/hashes, run ID, code revision and timestamps should accompany generated evidence. Reporting belongs in its own read-only downstream package because reports are versioned derivatives, not source-run artefacts.
+
+`telemetry.py` defines the stable nullable Parquet schemas shared by supervised and RL
+training. Long-form traces contain only metrics actually exposed or deterministically
+derived from the fitted estimator. Summaries record requested/actual device, fallback,
+duration, data shape, iterations/epochs, stopping reason, peak GPU memory when available,
+package/CUDA versions, seed and determinism details. Older immutable runs remain valid
+and presentation layers show explicit not-recorded states.

@@ -25,6 +25,13 @@
 - Verification command: `.venv/Scripts/python -m pytest -q`; the complete suite passed.
   The canonical Slice 1 persisted-run audit passed, and the prior RL run and report v1
   matched their stored manifests/hashes.
+- Extended future authoritative `trading_pipeline.run` executions to emit the same
+  telemetry contract without altering the fixed selection rule. Elastic Net records
+  solver/final diagnostics rather than an invented epoch curve; histogram GBT records
+  supported staged train/validation RMSE and deterministic GBT permutation importance.
+  The final upgraded CPU smoke run is `runs/smoke/20260920T002409Z-dde46671`; its
+  persisted audit passed and its v2 report is
+  `reports/smoke/20260920T002409Z-dde46671/v2`.
 
 This is diagnostic reproduction evidence only. The observed final test remains
 descriptive; confirmatory selection still requires a fresh data vintage and predeclared

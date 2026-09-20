@@ -9,17 +9,22 @@ import uuid
 import joblib
 import polars as pl
 import yaml
+from sklearn.inspection import permutation_importance
+from threadpoolctl import threadpool_limits
 from trading_pipeline.config import load_config
 from trading_pipeline.data import ingest, digest, write_parquet, yahoo_bars
 from trading_pipeline.features import build, F0, F1
 from trading_pipeline.modelling.targets import add_target
 from trading_pipeline.modelling.splits import temporal_split
-from trading_pipeline.modelling.training import choose_models, predict_test, MATRIX
+from trading_pipeline.modelling.training import (
+    choose_models, predict_test, supervised_training_telemetry, MATRIX,
+)
 from trading_pipeline.modelling.evaluate import metrics
 from trading_pipeline.portfolio import backtest, financial_metrics
 from trading_pipeline.environment import detect_environment, model_devices
 from trading_pipeline.audit import audit
 from trading_pipeline.tracking.artefacts import input_vintage, json_write, plots
+from trading_pipeline.tracking.telemetry import write_training_telemetry
 
 
 def run(cfg):
@@ -78,6 +83,10 @@ def run(cfg):
         json_write(root / "dataset_manifest.json", manifest)
         logging.info("Training four model/feature combinations; validation selection only")
         models, selection, validation_predictions = choose_models(frame, cfg["seed"])
+        trace_rows, summary_rows = supervised_training_telemetry(
+            run_id, models, selection, frame, cfg["seed"]
+        )
+        write_training_telemetry(root, trace_rows, summary_rows)
         # This persisted lock precedes every final-test prediction and metric.
         json_write(root / "selection.json", selection)
         (root / "models").mkdir()
@@ -132,6 +141,23 @@ def run(cfg):
             cols = F0 if experiment == "E1" else F1
             importance.extend(dict(model_id=experiment, feature=c, importance=float(v), method="standardized_elastic_net_coefficient")
                               for c, v in zip(cols, models[experiment]["model"].coef_))
+        validation = frame.filter(
+            (pl.col("split") == "validation") & pl.col("forward_return_5d").is_not_null()
+        )
+        for experiment in ("E2", "E4"):
+            cols = F0 if experiment == "E2" else F1
+            with threadpool_limits(limits=1):
+                result = permutation_importance(
+                    models[experiment], validation.select(cols).to_numpy(),
+                    validation["forward_return_5d"].to_numpy(),
+                    scoring="neg_root_mean_squared_error", n_repeats=3,
+                    random_state=cfg["seed"], n_jobs=1,
+                )
+            importance.extend(
+                dict(model_id=experiment, feature=column, importance=float(value),
+                     method="validation_permutation_delta_neg_rmse_3_repeats")
+                for column, value in zip(cols, result.importances_mean)
+            )
         write_parquet(pl.DataFrame(importance), root / "feature_importance.parquet")
         plots(curve, comparison, root / "plots")
         summary = ["# Slice 1 run", f"Mode: **{cfg['mode']}**. Synthetic runs are software verification only.",

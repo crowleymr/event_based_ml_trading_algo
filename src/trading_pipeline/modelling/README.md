@@ -15,3 +15,14 @@ fitted API supports them, are prediction diagnostics rather than optimizer loss.
 measure forecast error, daily IC measures cross-sectional ranking, RL reward measures a
 weekly control objective, and the after-cost portfolio objective is a separate realised
 financial outcome.
+
+New runs emit the common `training_trace.parquet` and `training_summary.parquet` contract.
+Elastic Net records `n_iter`, convergence/warning state, dual gap, selected parameters,
+the explicitly defined final objective and train/validation RMSE. Histogram GBT records
+train/validation RMSE for every supported boosting stage, selected parameters/iteration,
+duration, seed and CPU determinism metadata. These diagnostics never alter validation
+selection and the completed immutable reference run is not retrofitted.
+
+Because sklearn histogram GBT has no native impurity importance, new runs also persist a
+fixed-seed, three-repeat validation permutation importance using change in negative RMSE.
+It is a diagnostic of the frozen validation-selected model, not a new selection input.

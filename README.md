@@ -202,6 +202,8 @@ Every full invocation creates a new run ID and preserves previous experiment art
   metrics, plots, manifests, environment metadata, summary, logs, and audit.json.
 - Generated reports are versioned derivatives outside the immutable source run and
   record the run ID, input hashes, code revision and generation timestamp.
+- New supervised and RL runs emit schema-versioned `training_trace.parquet` and
+  `training_summary.parquet`; older runs display explicit not-recorded states.
 
 The completed reference run covers 100 equities and passed all persisted-run integrity
 checks. Known research limitations include survivorship bias, retrospective Yahoo
