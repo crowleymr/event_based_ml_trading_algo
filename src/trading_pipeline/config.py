@@ -10,4 +10,9 @@ def load_config(path):
         raise ValueError("Headline cost changes require approval")
     if cfg.get("mode") not in {"live", "synthetic"}:
         raise ValueError("mode must be live or synthetic")
+    xgboost = cfg.get("xgboost", {})
+    if xgboost.get("device", "cpu") not in {"cpu", "cuda", "auto"}:
+        raise ValueError("xgboost.device must be cpu, cuda or auto")
+    if xgboost.get("enabled") and xgboost.get("early_stopping_rounds", 20) < 1:
+        raise ValueError("xgboost.early_stopping_rounds must be positive")
     return cfg

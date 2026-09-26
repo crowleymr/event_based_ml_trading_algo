@@ -10,3 +10,12 @@ top_k: 10
 seed: 42
 retries: 4
 throttle_seconds: 0.3
+xgboost:
+  enabled: true
+  device: auto
+  n_estimators: 200
+  learning_rate: 0.05
+  early_stopping_rounds: 20
+  device_benchmark: true
+  research_status: diagnostic_reproduction_not_model_selection
+research_status: diagnostic_reproduction_not_model_selection

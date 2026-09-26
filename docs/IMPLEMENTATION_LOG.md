@@ -1,5 +1,77 @@
 # Implementation log
 
+## 2026-09-20 — Phase 3 engineering foundations without research-policy selection
+
+- Proceeded with the approved model refactoring and multi-run reporting work while
+  treating unresolved research choices as fail-closed gates. No real-data HPO, new
+  family winner, E5 change or observed-final-test selection was performed.
+- Added separate `SupervisedModel`, `UnsupervisedModel` and `RLPolicy` contracts,
+  allowlisted component registration and strict draft/approved study configuration.
+  Every new adapter is `research_enabled=False`; approved configs require explicit
+  authority, data-vintage, exposure-ledger and sealed-holdout manifests.
+- Added isolated adapters for legacy Elastic Net, histogram GBT and XGBoost; a
+  no-regime baseline and train-only deterministic GMM scaffold; and lazy DQN and
+  categorical PPO policy adapters. The existing supervised and frozen RL runners were
+  not replaced and completed experiment meanings remain unchanged.
+- Added deterministic grid/random proposal generation, purged nested expanding
+  walk-forward manifests and immutable trial-ledger writing for synthetic engineering
+  verification. Adaptive or real-data optimisation remains gated.
+- Added a read-only multi-run catalogue over completed audited runs, compatibility keys,
+  persisted metric indexing, versioned checksums and dashboard run/config/time
+  selection with incompatible-run warnings. Reporting provenance now hashes optional
+  training and device inputs when consumed.
+- Verification: the final complete test suite passed 74 tests in 56.02 seconds. Focused
+  contract, optimisation, catalogue, dashboard, reporting and RL tests also passed.
+  Authoritative synthetic run `runs/smoke/20260920T121854Z-ac1ac5c4` completed and its
+  persisted 17-check audit passed. Versioned multi-run catalogue
+  `reports/catalog/20260920T121854Z-ac1ac5c4-v1` was generated from completed audited
+  smoke/RL inputs. `git diff --check` passed; line-ending conversion warnings remain
+  informational.
+
+## 2026-09-20 — HistGBT preservation and separate XGBoost diagnostic cycle
+
+- Audited the current repository first and retained the already-implemented common
+  telemetry/staged HistGBT work. Preserved every existing immutable run and report; no
+  remote operation was performed.
+- Kept sklearn Histogram GBT as M2/E2/E4 and added XGBoost as append-only M3/E6/E7.
+  XGBoost uses histogram trees, a four-candidate grid, train-only median imputation,
+  validation-only early stopping, fixed seed/one thread and configurable
+  `cpu`/`cuda`/`auto` with executed CUDA preflight, explicit fallback and actual-device
+  evidence. E5 remains locked to E1-E4.
+- Extended the common trace/summary contract with XGBoost train/validation RMSE by
+  boosting round, one-based selected iteration, selected parameters, duration,
+  requested/actual device, fallback and XGBoost CUDA build metadata. HistGBT retains all
+  100 supported staged train/validation RMSE points and validation permutation
+  importance. XGBoost records native gain plus the same fixed-seed three-repeat
+  validation permutation importance. SHAP was not installed and no SHAP values were
+  fabricated.
+- Completed the immutable full frozen-vintage diagnostic run
+  `runs/20260920T010939Z-1225374b`; its 17-check persisted audit passed. It is labelled
+  `diagnostic_reproduction_not_model_selection`; E5 remained E3. E2/E4 each selected
+  the fixed 100-stage budget. E6/E7 each selected boosting round 1 through validation
+  early stopping; this is evidence from the frozen data, not a recommendation to change
+  the predeclared configuration.
+- Paired timing/parity evidence in the generated `device_benchmark.parquet` completed
+  without fallback and records the exact CPU/CUDA durations, validation RMSE and
+  prediction deltas. Timing includes harness/preflight overhead and these small,
+  early-stopped fits are not a general GPU performance benchmark.
+- Generated the versioned read-only combined report
+  `reports/20260920T010939Z-1225374b/v1` with the audited DQN run
+  `runs/rl/20260920T002714Z-9c9692fc`. Training Diagnostics now provides consistent
+  family/metric filtering, run/protocol/split metadata, devices, summaries, availability
+  notices and CPU/GPU evidence for HistGBT, XGBoost and DQN. Elastic Net explicitly
+  states that no conventional epoch/boosting curve applies.
+- Verification: 37 tests passed; the deterministic two-run XGBoost smoke contract and
+  report/dashboard tests passed; final durable software-verification run
+  `runs/smoke/20260920T012021Z-fbf2d306` passed its persisted audit; the full run audit
+  passed; an in-process Streamlit page execution reported zero exceptions; temporary
+  dashboard health and page endpoints both returned HTTP 200. Report output hashes were
+  recorded in provenance.
+
+Limitations remain: the final test was already observed and is descriptive only; CUDA
+timing is hardware/run-specific; SHAP is unavailable; and confirmatory comparison still
+requires a fresh vintage and predeclared walk-forward/holdout protocol.
+
 ## 2026-09-20 — Unified evidence dashboard and CUDA telemetry diagnostic
 
 - Preserved the user-owned `docs/planning/prompt-scratch_pad.md` edit and all existing

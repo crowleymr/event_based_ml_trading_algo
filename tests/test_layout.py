@@ -16,6 +16,15 @@ PLANNED_MODULES = [
     "trading_pipeline.modelling.elastic_net",
     "trading_pipeline.modelling.gbt",
     "trading_pipeline.modelling.evaluate",
+    "trading_pipeline.modelling.supervised_models",
+    "trading_pipeline.modelling.unsupervised_models",
+    "trading_pipeline.experiments.contracts",
+    "trading_pipeline.experiments.registry",
+    "trading_pipeline.experiments.schema",
+    "trading_pipeline.optimisation.search",
+    "trading_pipeline.optimisation.splits",
+    "trading_pipeline.optimisation.ledgers",
+    "trading_pipeline.rl.policy_models",
     "trading_pipeline.portfolio.signals",
     "trading_pipeline.portfolio.equal_weight",
     "trading_pipeline.portfolio.inverse_vol",
@@ -23,6 +32,7 @@ PLANNED_MODULES = [
     "trading_pipeline.tracking.artefacts",
     "trading_pipeline.validation.leakage",
     "trading_pipeline.reporting",
+    "trading_pipeline.reporting.catalog",
     "trading_pipeline.run",
 ]
 

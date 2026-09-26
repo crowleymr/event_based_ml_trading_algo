@@ -21,3 +21,13 @@ Use `--skip-dqn` only when the optional ML stack cannot be installed or the fixe
 training budget exceeds the stop condition. Outputs are new immutable directories
 under `runs/rl/`; the reference run and source feature file remain untouched. Reruns on
 the observed test must be labelled `diagnostic_reproduction_not_model_selection`.
+
+## Phase 3 policy adapters
+
+`policy_models/` contains research-disabled DQN and categorical PPO implementations of
+the shared `RLPolicy` contract. Optional Stable-Baselines3 and PyTorch imports are lazy.
+The adapters declare architecture/search spaces, validate discrete-action and resource
+constraints, and emit seed/device/resource telemetry. They do not replace or modify the
+frozen Phase 2 runner. Real-data DQN/PPO optimisation remains blocked until the
+walk-forward protocol, causal upstream lineage, economic objective, risk constraints,
+seeds and compute budget receive explicit approval.

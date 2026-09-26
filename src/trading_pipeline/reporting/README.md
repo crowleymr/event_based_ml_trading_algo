@@ -21,3 +21,20 @@ The output directory must not already exist. Corrections are made in source code
 and regenerated into a new version, never patched in place. The module does not fit,
 select, audit-with-writes or modify its source run. Industry, historical market cap,
 P/E and other unavailable PIT fields are explicitly deferred.
+
+## Multi-run catalogue
+
+The catalogue command indexes only completed, audited runs and writes a new versioned
+output with source hashes and a compatibility key:
+
+```powershell
+.venv/Scripts/python -m trading_pipeline.reporting.catalog_cli `
+  --runs runs `
+  --runs runs/rl `
+  --output reports/catalog/v1
+```
+
+`run_catalog.parquet` contains run/config/protocol identity; `metric_catalog.parquet`
+contains persisted experiment-comparison rows where available. Different compatibility
+keys may be inspected together but must not be pooled or ranked as a fair comparison.
+The catalogue never trains, audits with writes, or changes source runs.

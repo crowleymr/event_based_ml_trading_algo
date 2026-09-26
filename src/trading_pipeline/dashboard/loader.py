@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 import json
 import polars as pl
 
@@ -29,6 +30,18 @@ def _tables(root: Path, names: tuple[str, ...]) -> dict[str, pl.DataFrame]:
     return {name: pl.read_parquet(root / f"{name}.parquet") for name in names}
 
 
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _verify_generated_outputs(root: Path, provenance: dict) -> None:
+    """Verify new reports while keeping legacy output-manifest-free reports readable."""
+    for item in provenance.get("outputs", []):
+        path = root / item["relative_path"]
+        if not path.is_file() or _sha256(path) != item.get("sha256"):
+            raise ValueError(f"Generated report checksum mismatch: {item['relative_path']}")
+
+
 def load_report(path: str | Path) -> dict:
     root = Path(path).resolve()
     provenance_path = root / "provenance.json"
@@ -39,7 +52,12 @@ def load_report(path: str | Path) -> dict:
     if version not in {1, 2}:
         raise ValueError("Unsupported report schema version")
     names = REPORT_TABLES if version == 2 else REPORT_TABLES_V1
-    return {"root": root, "provenance": provenance, "tables": _tables(root, names)}
+    _verify_generated_outputs(root, provenance)
+    tables = _tables(root, names)
+    benchmark = root / "device_benchmark.parquet"
+    if benchmark.is_file():
+        tables["device_benchmark"] = pl.read_parquet(benchmark)
+    return {"root": root, "provenance": provenance, "tables": tables}
 
 
 def load_rl_run(path: str | Path) -> dict:
@@ -61,3 +79,24 @@ def load_rl_run(path: str | Path) -> dict:
         if path.is_file():
             tables[name] = pl.read_parquet(path)
     return {"root": root, "metadata": metadata, "audit": audit, "tables": tables}
+
+
+def load_catalog(path: str | Path) -> dict:
+    """Load a generated multi-run catalogue without touching source runs."""
+    root = Path(path).resolve()
+    provenance_path = root / "provenance.json"
+    catalog_path = root / "run_catalog.parquet"
+    if not provenance_path.is_file() or not catalog_path.is_file():
+        raise FileNotFoundError("Catalogue provenance and run_catalog.parquet are required")
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    if provenance.get("schema_version") != 1:
+        raise ValueError("Unsupported catalogue schema version")
+    if _sha256(catalog_path) != provenance.get("run_catalog_sha256"):
+        raise ValueError("Catalogue checksum mismatch: run_catalog.parquet")
+    tables = {"runs": pl.read_parquet(catalog_path)}
+    metrics = root / "metric_catalog.parquet"
+    if metrics.is_file():
+        if _sha256(metrics) != provenance.get("metric_catalog_sha256"):
+            raise ValueError("Catalogue checksum mismatch: metric_catalog.parquet")
+        tables["metrics"] = pl.read_parquet(metrics)
+    return {"root": root, "provenance": provenance, "tables": tables}

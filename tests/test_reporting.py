@@ -36,7 +36,7 @@ def test_report_derivation_is_deterministic(report_run):
 def test_report_schema_labels_and_source_reconciliation(report_run):
     tables, markdown, provenance = build_report(report_run)
     comparison = tables["experiment_comparison"]
-    assert set(comparison["experiment_id"]) == {f"E{i}" for i in range(6)}
+    assert set(comparison["experiment_id"]) == {f"E{i}" for i in range(8)}
     assert comparison.select(
         "experiment_id", "display_label", "feature_set_label", "estimator_label",
         "portfolio_label", "selection_role", "parameters_provenance",

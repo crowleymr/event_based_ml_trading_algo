@@ -89,7 +89,7 @@ On Linux or macOS, create the environment with python3.12 -m venv .venv and repl
 .venv/Scripts/python -m trading_pipeline.run --config configs/smoke.yaml
 ~~~
 
-Smoke mode uses deterministic synthetic data, requires no network access, runs E0-E5,
+Smoke mode uses deterministic synthetic data, requires no network access, runs E0-E7,
 and writes a new directory under runs/smoke/. It verifies software behavior only;
 its performance is not research evidence.
 
@@ -105,8 +105,9 @@ $env:SEC_USER_AGENT = 'TradingResearchPOC Your Real Name your-real-contact@email
 
 A Git-ignored .sec-user-agent file containing the same value is also supported.
 The main run downloads or reuses Yahoo and SEC data, validates and curates it, builds
-features and splits, freezes validation-selected models, evaluates the untouched test
-split, executes E0-E5 plus the SPY benchmark, and audits persisted outputs. Successful
+features and splits, freezes validation-selected models, evaluates the test split under
+the run's declared research status, executes E0-E7 plus the SPY benchmark, and audits persisted outputs. E6/E7 are separate XGBoost diagnostics; they do not replace the
+CPU Histogram GBT baseline or change E5's locked E1-E4 source set. Successful
 output appears under runs/<run_id>/.
 
 To download and validate data without training:
@@ -129,6 +130,10 @@ To generate a versioned read-only report from that exact run:
 
 The output directory must be new. It contains CSV and Parquet tables, a Markdown
 report and provenance JSON. Reporting never retrains, selects or changes the source run.
+
+The approved supervised diagnostic rerun is `runs/20260920T010939Z-1225374b` and its
+combined supervised/DQN dashboard report is `reports/20260920T010939Z-1225374b/v1`.
+Its observed-test results are labelled `diagnostic_reproduction_not_model_selection`.
 
 ### Run the Phase 2 exploratory selector and dashboard
 
@@ -162,11 +167,13 @@ RL run:
 
 ~~~powershell
 .venv/Scripts/python -m trading_pipeline.dashboard `
-  --report reports/20260912T071137Z-9899fd9a/v3 `
-  --rl-run runs/rl/<run_id>
+  --report reports/20260920T010939Z-1225374b/v1 `
+  --rl-run runs/rl/20260920T002714Z-9c9692fc
 ~~~
 
-The RL run is exploratory and the completed Slice 1 final test is descriptive only.
+Training Diagnostics uses the common telemetry contract for Histogram GBT, XGBoost and
+DQN. Elastic Net shows its solver/final diagnostics and an explicit no-conventional-curve
+notice. The RL run is exploratory and the completed Slice 1 final test is descriptive only.
 The dashboard never trains, tunes, regenerates reports or modifies source artefacts.
 
 Raw caches are not overwritten. Use a new data_dir for a new source-data vintage.

@@ -19,6 +19,7 @@ from trading_pipeline.modelling.splits import temporal_split
 from trading_pipeline.modelling.training import (
     choose_models, predict_test, supervised_training_telemetry, MATRIX,
 )
+from trading_pipeline.modelling.xgboost_model import device_benchmark as xgboost_device_benchmark
 from trading_pipeline.modelling.evaluate import metrics
 from trading_pipeline.portfolio import backtest, financial_metrics
 from trading_pipeline.environment import detect_environment, model_devices
@@ -35,15 +36,18 @@ def run(cfg):
     (root / "config.yaml").write_text(yaml.safe_dump(clean_cfg))
     handler = logging.FileHandler(root / "pipeline.log", encoding="utf-8")
     logging.getLogger().addHandler(handler)
+    dependency_names = ["polars", "duckdb", "pyarrow", "scikit-learn", "yfinance", "numpy"]
+    if cfg.get("xgboost", {}).get("enabled"):
+        dependency_names.append("xgboost")
     metadata = {"run_id": run_id, "timestamp": datetime.now(timezone.utc).isoformat(), "mode": cfg["mode"],
                 "environment": detect_environment(), **model_devices(cfg["seed"]),
+                "research_status": cfg.get("research_status", "frozen_protocol"),
                 "seed": cfg["seed"], "label_horizon": 5, "cost_bps_one_way": cfg["cost_bps"],
                 "execution": "first session of ISO week signal after close T, fill T+1 close",
                 "git_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
                 "git_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()),
                 "source_sha256": {p.as_posix(): digest(p) for p in sorted(Path("src/trading_pipeline").rglob("*.py"))},
-                "dependencies": {p: importlib.metadata.version(p) for p in
-                                 ("polars", "duckdb", "pyarrow", "scikit-learn", "yfinance", "numpy")}}
+                "dependencies": {p: importlib.metadata.version(p) for p in dependency_names}}
     json_write(root / "metadata.json", metadata | {"status": "running"})
     try:
         logging.info("Run %s (%s)", run_id, cfg["mode"])
@@ -81,12 +85,41 @@ def run(cfg):
                     "raw_files": input_vintage(cfg, master, benchmark is not None),
                     "curated_snapshot": [{"path": str(p.resolve()), "sha256": digest(p)} for p in sorted((root / "datasets").glob("*.parquet"))]}
         json_write(root / "dataset_manifest.json", manifest)
-        logging.info("Training four model/feature combinations; validation selection only")
-        models, selection, validation_predictions = choose_models(frame, cfg["seed"])
+        logging.info("Training registered model/feature combinations; validation selection only")
+        xgboost_config = cfg.get("xgboost", {})
+        models, selection, validation_predictions = choose_models(
+            frame, cfg["seed"], xgboost_config
+        )
         trace_rows, summary_rows = supervised_training_telemetry(
             run_id, models, selection, frame, cfg["seed"]
         )
         write_training_telemetry(root, trace_rows, summary_rows)
+        metadata["actual_device_per_model"] = {
+            experiment: getattr(model, "_telemetry_actual_device", "cpu")
+            for experiment, model in models.items()
+        }
+        metadata["gpu_fallback_reason"] = {
+            experiment: getattr(model, "_telemetry_fallback_reason", None)
+            for experiment, model in models.items()
+            if getattr(model, "_telemetry_fallback_reason", None)
+        } or None
+        if xgboost_config.get("enabled") and xgboost_config.get("device_benchmark", False):
+            train = frame.filter(
+                (pl.col("split") == "train") & pl.col("forward_return_5d").is_not_null()
+            )
+            validation = frame.filter(
+                (pl.col("split") == "validation") & pl.col("forward_return_5d").is_not_null()
+            )
+            benchmark_rows = []
+            for experiment in ("E6", "E7"):
+                columns = F0 if MATRIX[experiment][0] == "F0" else F1
+                benchmark_rows.extend(xgboost_device_benchmark(
+                    experiment, selection["models"][experiment]["parameters"], cfg["seed"],
+                    xgboost_config,
+                    train.select(columns).to_numpy(), train["forward_return_5d"].to_numpy(),
+                    validation.select(columns).to_numpy(), validation["forward_return_5d"].to_numpy(),
+                ))
+            write_parquet(pl.DataFrame(benchmark_rows), root / "device_benchmark.parquet")
         # This persisted lock precedes every final-test prediction and metric.
         json_write(root / "selection.json", selection)
         (root / "models").mkdir()
@@ -106,8 +139,9 @@ def run(cfg):
         write_parquet(predictions, root / "predictions.parquet")
         curves, positions, trades, rows, ic_frames = [], [], [], [], []
         all_metrics = {}
+        experiment_ids = ["E0", *models.keys(), "E5"]
         for split in ("validation", "test"):
-            for experiment in ("E0", "E1", "E2", "E3", "E4", "E5"):
+            for experiment in experiment_ids:
                 p = predictions.filter((pl.col("split") == split) & (pl.col("model_id") == experiment))
                 curve, pos, trade = backtest(p, bars, experiment, split, cfg["top_k"], cfg["cost_bps"], experiment == "E5")
                 finance = financial_metrics(curve)
@@ -158,6 +192,31 @@ def run(cfg):
                      method="validation_permutation_delta_neg_rmse_3_repeats")
                 for column, value in zip(cols, result.importances_mean)
             )
+        for experiment in ("E6", "E7"):
+            if experiment not in models:
+                continue
+            cols = F0 if experiment == "E6" else F1
+            booster_scores = models[experiment].named_steps["model"].get_booster().get_score(
+                importance_type="gain"
+            )
+            importance.extend(
+                dict(model_id=experiment, feature=column,
+                     importance=float(booster_scores.get(f"f{index}", 0.0)),
+                     method="xgboost_gain")
+                for index, column in enumerate(cols)
+            )
+            with threadpool_limits(limits=1):
+                result = permutation_importance(
+                    models[experiment], validation.select(cols).to_numpy(),
+                    validation["forward_return_5d"].to_numpy(),
+                    scoring="neg_root_mean_squared_error", n_repeats=3,
+                    random_state=cfg["seed"], n_jobs=1,
+                )
+            importance.extend(
+                dict(model_id=experiment, feature=column, importance=float(value),
+                     method="validation_permutation_delta_neg_rmse_3_repeats")
+                for column, value in zip(cols, result.importances_mean)
+            )
         write_parquet(pl.DataFrame(importance), root / "feature_importance.parquet")
         plots(curve, comparison, root / "plots")
         summary = ["# Slice 1 run", f"Mode: **{cfg['mode']}**. Synthetic runs are software verification only.",
@@ -172,12 +231,16 @@ def run(cfg):
                     "SEC latest values can mix fiscal durations; only USD and USD/share enter features. No growth ratios.",
                     "Company Facts event table covers filings containing the two selected facts, not every SEC filing.",
                     "T+1-close fills; close-to-close target differs from executable return. No slippage model beyond 10 bps.",
-                    f"B0: {benchmark_status}. No tree importance extras. Terminal holdings marked, not liquidated.",
+                    f"B0: {benchmark_status}. Tree importance is predictive, not causal. Terminal holdings marked, not liquidated.",
+                    f"Research status: {cfg.get('research_status', 'frozen_protocol')}.",
                     "Stage-gate success requires human research judgement; no alpha claim is made."]
         (root / "summary.md").write_text("\n\n".join(summary).replace("|\n\n|", "|\n|"), encoding="utf-8")
         audit(root)
         json_write(root / "metadata.json", metadata | {"status": "complete", "split_dates": split_manifest,
-                   "experiments": MATRIX | {"E0": ["momentum", "equal_weight"], "E5": [selection["e5_source"], "inverse_vol"]}})
+                   "experiments": {e: MATRIX[e] for e in models} | {
+                       "E0": ["momentum", "equal_weight"],
+                       "E5": [selection["e5_source"], "inverse_vol"],
+                   }})
         logging.info("Completed: %s", root)
         return root
     except Exception as exc:

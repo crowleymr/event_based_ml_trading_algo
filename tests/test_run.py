@@ -31,6 +31,7 @@ def test_smoke_reproducibility_and_contract(tmp_path):
     for name in ("config.yaml", "metadata.json", "dataset_manifest.json", "split_manifest.json", "metrics.json",
                  "predictions.parquet", "positions.parquet", "trades.parquet", "equity_curve.parquet",
                  "training_trace.parquet", "training_summary.parquet",
+                 "device_benchmark.parquet",
                  "feature_importance.parquet", "selection.json", "summary.md", "plots/equity_curve.png",
                  "plots/drawdown.png", "plots/model_comparison.png"):
         assert (first / name).is_file()
@@ -47,19 +48,32 @@ def test_smoke_reproducibility_and_contract(tmp_path):
     )
     a, b = pl.read_parquet(first / "predictions.parquet"), pl.read_parquet(second / "predictions.parquet")
     assert a.equals(b)
-    assert set(a["model_id"]) == {f"E{i}" for i in range(6)}
+    assert set(a["model_id"]) == {f"E{i}" for i in range(8)}
     trace = pl.read_parquet(first / "training_trace.parquet")
     training_summary = pl.read_parquet(first / "training_summary.parquet")
-    assert set(training_summary["experiment_id"]) == {"E1", "E2", "E3", "E4"}
+    assert set(training_summary["experiment_id"]) == {"E1", "E2", "E3", "E4", "E6", "E7"}
     assert set(trace.filter(pl.col("model_family") == "Elastic Net")["metric_name"]) >= {
         "final/n_iter", "final/dual_gap", "final/objective", "train/rmse", "validation/rmse"
     }
     assert trace.filter(pl.col("model_family") == "Histogram GBT")["step"].n_unique() == 100
+    assert set(trace.filter(pl.col("model_family") == "XGBoost")["metric_name"]) == {
+        "train/rmse", "validation/rmse"
+    }
+    assert set(training_summary.filter(pl.col("model_family") == "XGBoost")["actual_device"]) <= {
+        "cpu", "cuda"
+    }
     importance = pl.read_parquet(first / "feature_importance.parquet")
-    assert set(importance["model_id"]) == {"E1", "E2", "E3", "E4"}
+    assert set(importance["model_id"]) == {"E1", "E2", "E3", "E4", "E6", "E7"}
     assert set(importance.filter(pl.col("model_id").is_in(["E2", "E4"]))["method"]) == {
         "validation_permutation_delta_neg_rmse_3_repeats"
     }
+    assert set(importance.filter(pl.col("model_id").is_in(["E6", "E7"]))["method"]) == {
+        "xgboost_gain", "validation_permutation_delta_neg_rmse_3_repeats"
+    }
+    device_benchmark = pl.read_parquet(first / "device_benchmark.parquet")
+    assert set(device_benchmark["experiment_id"]) == {"E6", "E7"}
+    assert set(device_benchmark["requested_device"]) == {"cpu", "cuda"}
+    assert set(device_benchmark["research_status"]) == {"diagnostic_reproduction_not_model_selection"}
     winner = json.loads((first / "selection.json").read_text())["e5_source"]
     cols = ["session_date", "security_id", "split", "predicted_return_5d"]
     assert a.filter(pl.col("model_id") == winner).select(cols).equals(a.filter(pl.col("model_id") == "E5").select(cols))

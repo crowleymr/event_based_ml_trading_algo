@@ -1,0 +1,73 @@
+schema_version: 3
+kind: optimisation_study
+study_id: phase3_engineering_contract_v1
+status: draft
+
+authority:
+  parent_protocol: slice1_locked
+  approval_record: null
+  protocol_sha256: null
+
+data:
+  vintage_id: synthetic_engineering_only
+  snapshot_manifest: null
+  exposure_ledger: null
+  forbidden_selection_role: legacy_observed_final
+  group_by: session_date
+
+validation:
+  scheme: nested_purged_expanding_walk_forward
+  outer_windows_manifest: null
+  inner_windows_manifest: null
+  purge: information_interval_overlap
+  embargo_sessions: 5
+  final_holdout:
+    manifest: null
+    sealed: true
+    requires_selection_lock: true
+
+experiment_arms:
+  - id: EN_F0_ENGINEERING
+    interface: SupervisedModel
+    component_id: supervised.elastic_net.v1
+    feature_set_id: F0
+    objective_id: ranking_utility_draft
+  - id: GMM_ENGINEERING
+    interface: UnsupervisedModel
+    component_id: gmm_regime_v1
+    objective_id: forward_log_density_draft
+  - id: PPO_ENGINEERING
+    interface: RLPolicy
+    component_id: rl_ppo_categorical_sb3_v1
+    objective_id: weekly_net_ce_unresolved
+
+objectives:
+  ranking_utility_draft:
+    status: requires_human_approval
+  forward_log_density_draft:
+    status: engineering_only
+  weekly_net_ce_unresolved:
+    status: requires_human_approval
+    risk_aversion: null
+
+selection:
+  rule_id: practical_equivalence_then_parsimony_draft
+  final_test_selection: forbidden
+  require_complete_folds: true
+  require_all_registered_seeds: true
+
+search:
+  policy_id: deterministic_engineering_smoke
+  method: grid
+  attempt_budget: 2
+  real_data_execution: forbidden
+
+reproducibility:
+  seeds: [41]
+  requested_device: cpu
+  threads_per_fit: 1
+
+outputs:
+  runs_root: runs/smoke
+  reports_root: reports/smoke
+  immutable_completion_manifest: true

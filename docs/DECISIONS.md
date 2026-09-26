@@ -67,3 +67,13 @@ by the fitted library. Missing histories are reported as not recorded. In partic
 Elastic Net has solver iterations and convergence diagnostics rather than epochs, and no
 synthetic epoch loss curve may be created. Report schema v2 remains a read-only,
 hash-backed derivative and may embed only a completed audited RL run.
+
+2026-09-20 supervised diagnostic decision: preserve sklearn Histogram GBT as M2/E2/E4
+and add XGBoost separately as M3/E6/E7. E5 remains eligible only for the original E1-E4
+set, so the new family cannot rewrite the frozen selection decision. XGBoost uses
+`tree_method="hist"`, validation-only early stopping and `cpu`/`cuda`/`auto` with an
+executed CUDA preflight and explicit CPU fallback. Paired CPU/GPU timing and prediction
+parity are engineering diagnostics, not model/device selection. All use of the already
+observed final test is labelled `diagnostic_reproduction_not_model_selection`. SHAP is
+optional; native gain and deterministic validation permutation importance are the
+guaranteed importance contract.

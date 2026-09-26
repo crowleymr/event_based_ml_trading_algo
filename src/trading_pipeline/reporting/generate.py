@@ -37,6 +37,11 @@ REQUIRED = (
     "datasets/market_bars.parquet",
     "datasets/fundamental_facts.parquet",
 )
+OPTIONAL_REPORT_INPUTS = (
+    "training_trace.parquet",
+    "training_summary.parquet",
+    "device_benchmark.parquet",
+)
 
 METRICS = {
     "total_return": ("Compounded end equity minus one", "decimal fraction"),
@@ -484,12 +489,31 @@ def _training_tables(root: Path) -> dict[str, pl.DataFrame]:
          "reason": "The immutable Slice 1 run predates training telemetry; Elastic Net has iterations, not epochs."},
         {"model_family": "Histogram GBT", "state": "not recorded for this run",
          "reason": "The immutable Slice 1 run predates staged training telemetry."},
+        {"model_family": "XGBoost", "state": "not recorded for this run",
+         "reason": "The immutable Slice 1 run predates the separately registered XGBoost family."},
     ]) if summary.is_empty() else pl.DataFrame([
-        {"model_family": family, "state": "recorded", "reason": None}
+        {
+            "model_family": family,
+            "state": "summary recorded; no conventional learning curve" if family == "Elastic Net" else "recorded",
+            "reason": (
+                "Elastic Net exposes solver iterations and final diagnostics, not epoch/boosting stages; no curve is fabricated."
+                if family == "Elastic Net" else None
+            ),
+        }
         for family in summary["model_family"].unique().sort().to_list()
     ])
+    benchmark_path = root / "device_benchmark.parquet"
+    device_benchmark = pl.read_parquet(benchmark_path) if benchmark_path.is_file() else pl.DataFrame(schema={
+        "experiment_id": pl.String, "requested_device": pl.String,
+        "actual_device": pl.String, "status": pl.String,
+        "fallback_reason": pl.String, "duration_seconds": pl.Float64,
+        "validation_rmse": pl.Float64, "selected_iteration": pl.Int64,
+        "max_abs_prediction_delta_vs_cpu": pl.Float64,
+        "research_status": pl.String,
+    })
     return {"training_trace": trace, "training_summary": summary,
-            "training_availability": availability}
+            "training_availability": availability,
+            "device_benchmark": device_benchmark}
 
 
 def _rl_tables(rl_root: Path | None) -> tuple[dict[str, pl.DataFrame], list[dict]]:
@@ -523,12 +547,14 @@ def _field_definitions(tables: dict[str, pl.DataFrame]) -> pl.DataFrame:
         "downside_capture": METRICS["downside_capture"][0],
         "metric_value": "Recorded value emitted by the named training metric; unavailable values are omitted",
         "peak_gpu_memory_bytes": "Peak allocated PyTorch CUDA memory during this fit, when CUDA executed",
+        "selected_iteration": "One-based best boosting round selected using validation evidence only",
+        "max_abs_prediction_delta_vs_cpu": "Maximum absolute validation-prediction difference from the paired CPU diagnostic fit",
     }
     rows = []
     for table in (
         "split_profile", "feature_summary", "target_summary", "prediction_diagnostics",
         "prediction_deciles", "feature_importance", "benchmark_relative_series",
-        "benchmark_relative_metrics", "training_trace", "training_summary",
+        "benchmark_relative_metrics", "training_trace", "training_summary", "device_benchmark",
     ):
         for field in tables[table].columns:
             unit = "identifier/text"
@@ -602,6 +628,7 @@ def build_report(root: str | Path, rl_run: str | Path | None = None) -> tuple[di
     provenance = {
         "report_schema_version": REPORT_SCHEMA_VERSION,
         "source_run_id": metadata["run_id"],
+        "source_run_research_status": metadata.get("research_status", "not_recorded"),
         "source_run_path": str(root),
         "source_run_git_commit": metadata.get("git_commit"),
         "inputs": [
@@ -610,7 +637,10 @@ def build_report(root: str | Path, rl_run: str | Path | None = None) -> tuple[di
         ] + (
             [{"relative_path": "datasets/benchmark.parquet", "sha256": digest(root / "datasets/benchmark.parquet")}]
             if (root / "datasets/benchmark.parquet").is_file() else []
-        ) + [feature_dependency] + rl_inputs,
+        ) + [
+            {"relative_path": name, "sha256": digest(root / name)}
+            for name in OPTIONAL_REPORT_INPUTS if (root / name).is_file()
+        ] + [feature_dependency] + rl_inputs,
     }
     return tables, report, provenance
 

@@ -7,7 +7,7 @@
 | Source preservation and schemas | `trading_pipeline.data` | Cache Yahoo/SEC inputs, map identifiers, validate and snapshot canonical tables |
 | Feature engineering | `trading_pipeline.features.market`, `fundamentals` | Backward-looking rolling transforms and strict SEC filed-date as-of joins |
 | Target and temporal split | `trading_pipeline.modelling.targets`, `splits` | Five-session label, boundary purge and embargo |
-| Estimators | `elastic_net`, `gbt` | Construct deterministic sklearn pipelines |
+| Estimators | `elastic_net`, `gbt`, `xgboost_model` | Construct deterministic CPU baselines and the separate CPU/CUDA XGBoost diagnostic |
 | Fit/select/predict | `training` | Fixed candidate grids, train-only fitting and validation-only selection |
 | Model evaluation | `evaluate` | MAE, RMSE and daily Spearman IC |
 | Portfolio decision | `trading_pipeline.portfolio` | Shared top-K selection, equal/inverse-vol weights and T+1 accounting |
@@ -54,6 +54,20 @@ Fitting procedure:
 4. apply the same validation-only selection rule.
 
 `max_leaf_nodes` controls tree capacity; `l2_regularization` shrinks leaf values; learning rate controls each tree's contribution; iteration count controls ensemble length. The small grid limits search degrees of freedom.
+
+## XGBoost diagnostic family
+
+E6/E7 add XGBoost as a separate family rather than replacing Histogram GBT. The harness
+uses histogram tree construction, a fixed seed and one numerical thread, with requested
+device `cpu`, `cuda` or `auto`. A real CUDA fit preflight determines availability; any
+fallback to CPU is explicit in persisted metadata.
+
+The training matrix is imputed using train-only medians. XGBoost receives training and
+validation evaluation sets, records RMSE at each boosting round and may early-stop using
+validation only. The final test never controls iteration count or parameters. Native gain
+and fixed-seed validation permutation importance are descriptive diagnostics. E6/E7 and
+their CPU/GPU timing comparison carry `diagnostic_reproduction_not_model_selection`;
+E5 still reuses the original E1-E4 validation winner.
 
 ## Portfolio algorithms
 

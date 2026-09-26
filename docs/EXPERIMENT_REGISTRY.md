@@ -12,6 +12,8 @@ This is the semantic registry for stable machine IDs. Existing artefacts are imm
 | E3 | Market + SEC Elastic Net · Equal Weight | F1 market + PIT SEC | M1 Elastic Net | P1 equal-weight top 10 | Candidate; validation-tuned | Selected candidate stored at `selection.json.models.E3` |
 | E4 | Market + SEC Histogram GBT · Equal Weight | F1 market + PIT SEC | M2 histogram GBT | P1 equal-weight top 10 | Candidate; validation-tuned | Selected candidate stored at `selection.json.models.E4` |
 | E5 | Validation Winner · Inverse Volatility | Source candidate's features | Reuses frozen winner predictions | P2 inverse-volatility top 10 | Risk-engine comparison; no new predictive fit | Source stored at `selection.json.e5_source`; reference run source is E3 |
+| E6 | Market XGBoost · Equal Weight | F0 market | M3 XGBoost | P1 equal-weight top 10 | Diagnostic validation-tuned candidate; cannot alter E5 | Selected candidate/device stored at `selection.json.models.E6` |
+| E7 | Market + SEC XGBoost · Equal Weight | F1 market + PIT SEC | M3 XGBoost | P1 equal-weight top 10 | Diagnostic validation-tuned candidate; cannot alter E5 | Selected candidate/device stored at `selection.json.models.E7` |
 | B0 | SPY Buy and Hold | None | Broad-market price baseline | Buy once and hold | Descriptive benchmark, never an ML candidate | Yahoo adjusted SPY, T+1 close and same cost convention |
 
 ### Feature and estimator IDs
@@ -22,10 +24,16 @@ This is the semantic registry for stable machine IDs. Existing artefacts are imm
 | F1 | Market + SEC | F0 plus latest strictly available basic EPS and Net Income |
 | M1 | Elastic Net regressor | Median imputation, standardization, Elastic Net; four-candidate fixed grid |
 | M2 | Histogram GBT regressor | Median imputation, sklearn histogram gradient boosting; four-candidate fixed grid |
+| M3 | XGBoost regressor | Train-only median imputation, `tree_method="hist"`, four-candidate fixed grid, validation-only early stopping, configurable CPU/CUDA/auto with explicit fallback |
 | P1 | Equal-weight top-K | Long-only, top 10, weights 1/K |
 | P2 | Inverse-volatility top-K | Same top 10, normalized inverse trailing 20-session volatility |
 
 The reference run parameters are authoritative in its immutable `selection.json`; documentation must not transcribe numeric choices as a substitute for reading that file.
+
+E6/E7 first apply to approved diagnostic run `20260920T010939Z-1225374b`. The run
+retains the original E1-E4 E5 source set and labels all already-observed-test results
+`diagnostic_reproduction_not_model_selection`. Its paired CPU/CUDA timings are engineering
+diagnostics only and cannot choose a device, model or parameter.
 
 ## Phase 2 exploratory selector registry
 

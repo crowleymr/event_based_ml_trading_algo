@@ -12,3 +12,7 @@ derived from the fitted estimator. Summaries record requested/actual device, fal
 duration, data shape, iterations/epochs, stopping reason, peak GPU memory when available,
 package/CUDA versions, seed and determinism details. Older immutable runs remain valid
 and presentation layers show explicit not-recorded states.
+
+Supervised XGBoost runs also emit `device_benchmark.parquet`: paired CPU/CUDA status,
+actual device, fallback, elapsed time, validation RMSE, selected iteration and maximum
+prediction delta. This diagnostic is explicitly non-selection evidence.

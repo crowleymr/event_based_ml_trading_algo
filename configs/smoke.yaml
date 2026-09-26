@@ -10,3 +10,12 @@ top_k: 10
 seed: 42
 synthetic_sessions: 650
 synthetic_securities: 12
+xgboost:
+  enabled: true
+  device: auto
+  n_estimators: 40
+  learning_rate: 0.05
+  early_stopping_rounds: 5
+  device_benchmark: true
+  research_status: software_verification_only
+research_status: software_verification_only

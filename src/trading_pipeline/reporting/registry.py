@@ -43,6 +43,20 @@ BASE = {
         "portfolio_label": "Inverse-volatility top 10",
         "selection_role": "Risk-engine comparison",
     },
+    "E6": {
+        "display_label": "Market XGBoost · Equal Weight",
+        "feature_set_label": "F0 Market",
+        "estimator_label": "XGBoost",
+        "portfolio_label": "Equal-weight top 10",
+        "selection_role": "Diagnostic validation-tuned candidate",
+    },
+    "E7": {
+        "display_label": "Market + SEC XGBoost · Equal Weight",
+        "feature_set_label": "F1 Market + PIT SEC",
+        "estimator_label": "XGBoost",
+        "portfolio_label": "Equal-weight top 10",
+        "selection_role": "Diagnostic validation-tuned candidate",
+    },
     "B0": {
         "display_label": "SPY Buy and Hold",
         "feature_set_label": "None",
