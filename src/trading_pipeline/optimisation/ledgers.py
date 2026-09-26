@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import polars as pl
+
+from .evaluator import FitEvidence
 
 
 @dataclass(frozen=True)
@@ -41,4 +45,34 @@ def write_trial_ledger(path: str | Path, records: Sequence[TrialRecord]) -> Path
         rows.append(row)
     destination.parent.mkdir(parents=True, exist_ok=True)
     pl.DataFrame(rows).write_parquet(destination)
+    return destination
+
+
+def append_fit_evidence(path: str | Path, records: Sequence[FitEvidence]) -> Path:
+    """Append complete fit/seed facts without replacing prior evidence."""
+    destination = Path(path)
+    if not records:
+        raise ValueError("At least one fit record is required")
+    existing: set[tuple[str, str, str, str, int]] = set()
+    if destination.exists():
+        for line in destination.read_text(encoding="utf-8").splitlines():
+            item = json.loads(line)
+            existing.add(tuple(item[key] for key in
+                               ("study_id", "trial_id", "outer_fold_id", "inner_fold_id", "seed")))
+    additions = []
+    for record in records:
+        key = (record.study_id, record.trial_id, record.outer_fold_id,
+               record.inner_fold_id, record.seed)
+        if key in existing:
+            raise ValueError(f"Fit evidence already exists: {key}")
+        existing.add(key)
+        item = asdict(record)
+        item["recorded_at"] = datetime.now(timezone.utc).isoformat()
+        payload = json.dumps(item, sort_keys=True, default=str, allow_nan=False)
+        item["sha256"] = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        additions.append(json.dumps(item, sort_keys=True, default=str, allow_nan=False))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("a", encoding="utf-8") as stream:
+        for line in additions:
+            stream.write(line + "\n")
     return destination

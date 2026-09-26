@@ -64,7 +64,8 @@ def main():
 
     tabs = st.tabs([
         "Overview / Evidence", "Data & Splits", "Model Diagnostics",
-        "Training Diagnostics", "RL Gym", "Backtest & Benchmark", "Securities",
+        "Training Diagnostics", "RL Gym", "Risk / Frontiers",
+        "Backtest & Benchmark", "Securities",
     ])
     with tabs[0]:
         st.subheader("Immutable evidence and research status")
@@ -103,6 +104,9 @@ def main():
             st.dataframe(tables["metric_definitions"].to_pandas(), width="stretch")
 
     with tabs[1]:
+        if "pipeline_stage_summary" in tables:
+            st.subheader("End-to-end pipeline funnel")
+            st.dataframe(tables["pipeline_stage_summary"].to_pandas(), width="stretch")
         if "split_profile" not in tables:
             st.info("Data and split diagnostics were not recorded in this report version.")
         else:
@@ -223,7 +227,53 @@ def main():
             st.dataframe(rl["actions"].to_pandas(), width="stretch")
 
     with tabs[5]:
-        series = _filtered(tables["equity_drawdown_series"], split, selected).to_pandas()
+        st.subheader("Model-conditioned efficient frontiers")
+        st.caption(
+            "Classical frontiers apply only to supervised models that emit security-level "
+            "expected returns. DQN and PPO are evaluated in the realised risk-return view."
+        )
+        frontier = tables.get("model_conditioned_frontier_points")
+        if frontier is None or frontier.is_empty():
+            st.info("No completed model-conditioned frontier evidence is available for this report.")
+        else:
+            frontier_pd = frontier.filter(pl.col("status") == "complete").to_pandas()
+            if frontier_pd.empty:
+                st.warning("All requested frontier optimisations failed; failure evidence is retained.")
+                st.dataframe(frontier.to_pandas(), width="stretch")
+            else:
+                dates = sorted(frontier_pd["rebalance_date"].unique().tolist())
+                chosen_date = st.selectbox("Rebalance date", dates, index=len(dates) - 1)
+                dated = frontier_pd[frontier_pd["rebalance_date"] == chosen_date].sort_values(
+                    ["model_id", "expected_volatility"]
+                )
+                st.line_chart(
+                    dated, x="expected_volatility", y="expected_return", color="model_id"
+                )
+                st.dataframe(dated, width="stretch")
+        st.subheader("Realised model risk-return curves")
+        realised = tables.get("realised_risk_return_curve")
+        if realised is None or realised.is_empty():
+            st.info("No completed three-scenario realised risk-return evidence is available.")
+        else:
+            realised_pd = realised.sort(["model_id", "risk_order"]).to_pandas()
+            monotonic = realised_pd[realised_pd["risk_control_monotonic"]]
+            non_monotonic = realised_pd[~realised_pd["risk_control_monotonic"]]
+            if not monotonic.empty:
+                st.line_chart(
+                    monotonic, x="annualised_volatility", y="annualised_return", color="model_id"
+                )
+            if not non_monotonic.empty:
+                st.warning(
+                    "Some risk controls are non-monotonic; those outcomes are shown as unconnected points."
+                )
+                st.scatter_chart(
+                    non_monotonic, x="annualised_volatility", y="annualised_return", color="model_id"
+                )
+            st.dataframe(realised_pd, width="stretch")
+
+    with tabs[6]:
+        source_series = tables.get("final_testbench_equity_curve", tables["equity_drawdown_series"])
+        series = _filtered(source_series, split, selected).to_pandas()
         if not series.empty:
             st.line_chart(series, x="session_date", y="equity", color="display_label")
             st.line_chart(series, x="session_date", y="drawdown", color="display_label")
@@ -237,11 +287,31 @@ def main():
         st.line_chart(costs, x="session_date", y="cumulative_turnover", color="display_label")
         st.line_chart(costs, x="session_date", y="cumulative_cost", color="display_label")
 
-    with tabs[6]:
+    with tabs[7]:
         st.caption("Generated holdings, trades and reconciled security contributions")
-        st.dataframe(_filtered(tables["security_holdings_summary"], split, selected).to_pandas(), width="stretch")
-        st.dataframe(_filtered(tables["security_trades_summary"], split, selected).to_pandas(), width="stretch")
-        st.dataframe(_filtered(tables["security_contribution_summary"], split, selected).to_pandas(), width="stretch")
+        security_frames = [
+            tables["security_holdings_summary"], tables["security_trades_summary"],
+            tables["security_contribution_summary"],
+        ]
+        tickers = sorted({
+            ticker for frame in security_frames if "ticker" in frame.columns
+            for ticker in frame["ticker"].drop_nulls().to_list()
+        })
+        selected_tickers = st.multiselect("Tickers", tickers, default=[], key="security_tickers")
+        if "pipeline_security_summary" in tables:
+            pipeline_security = tables["pipeline_security_summary"]
+            if selected_tickers and "ticker" in pipeline_security.columns:
+                pipeline_security = pipeline_security.filter(pl.col("ticker").is_in(selected_tickers))
+            st.subheader("Pipeline contribution by security")
+            st.dataframe(pipeline_security.to_pandas(), width="stretch")
+        for heading, frame in zip(
+            ("Holdings", "Trades", "Net contribution"), security_frames, strict=True
+        ):
+            filtered = _filtered(frame, split, selected)
+            if selected_tickers and "ticker" in filtered.columns:
+                filtered = filtered.filter(pl.col("ticker").is_in(selected_tickers))
+            st.subheader(heading)
+            st.dataframe(filtered.to_pandas(), width="stretch")
 
 
 if __name__ == "__main__":

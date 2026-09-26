@@ -7,12 +7,17 @@ from trading_pipeline.experiments import ComponentRegistry
 from .elastic_net import ELASTIC_NET_SPEC, ElasticNetModel
 from .hist_gbt import HIST_GBT_SPEC, HistGradientBoostingModel
 from .xgboost import XGBOOST_SPEC, XGBoostModel
+from .deep_sequence import (
+    LSTM_SPEC, TRANSFORMER_SPEC, LSTMModel, CausalTransformerModel,
+)
 
 
 SUPERVISED_REGISTRATIONS = (
     (ELASTIC_NET_SPEC, ElasticNetModel),
     (HIST_GBT_SPEC, HistGradientBoostingModel),
     (XGBOOST_SPEC, XGBoostModel),
+    (LSTM_SPEC, LSTMModel),
+    (TRANSFORMER_SPEC, CausalTransformerModel),
 )
 
 
@@ -26,9 +31,13 @@ __all__ = [
     "ELASTIC_NET_SPEC",
     "HIST_GBT_SPEC",
     "XGBOOST_SPEC",
+    "LSTM_SPEC",
+    "TRANSFORMER_SPEC",
     "ElasticNetModel",
     "HistGradientBoostingModel",
     "XGBoostModel",
+    "LSTMModel",
+    "CausalTransformerModel",
     "SUPERVISED_REGISTRATIONS",
     "register_supervised_models",
 ]

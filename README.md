@@ -54,7 +54,8 @@ event_based_ml_trading_algo/
 │   └── run.py                      # End-to-end application entry point
 ├── tests/                          # Unit, leakage, accounting, reproducibility, layout tests
 ├── notebooks/
-│   └── poc_results.ipynb           # Read-only exploration of persisted results
+│   ├── poc_results.ipynb           # Legacy Slice 1 report explorer
+│   └── final_evidence.ipynb        # Executable end-to-end evidence showcase
 ├── runs/                           # Git-ignored immutable experiment artefacts
 ├── docs/                           # Specification, decisions, logs, architecture, evidence
 └── .github/workflows/smoke.yml     # Manual CPU-only test and smoke workflow
@@ -130,6 +131,11 @@ To generate a versioned read-only report from that exact run:
 
 The output directory must be new. It contains CSV and Parquet tables, a Markdown
 report and provenance JSON. Reporting never retrains, selects or changes the source run.
+
+Open [the final evidence notebook](notebooks/final_evidence.ipynb) for the read-only
+end-to-end narrative, source-code links, security drill-down, architecture/HPO evidence,
+risk scenarios, model-conditioned frontiers, realised risk-return curves and final
+benchmark comparison. Set `TRADING_REPORT_DIR` to the generated report to inspect.
 
 The approved supervised diagnostic rerun is `runs/20260920T010939Z-1225374b` and its
 combined supervised/DQN dashboard report is `reports/20260920T010939Z-1225374b/v1`.

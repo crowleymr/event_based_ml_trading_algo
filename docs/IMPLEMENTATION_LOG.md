@@ -1,5 +1,44 @@
 # Implementation log
 
+## 2026-09-26 — Temporal evaluator and registered RL engineering lane (WP2/WP4)
+
+- Added a synthetic-only nested temporal evaluator over predeclared outer/inner
+  folds. It validates date coverage and label intervals, keeps outer score rows
+  away from inner fit/score callbacks, and purges an optional stopping tail.
+- Added append-only per-fit/fold/seed JSONL evidence, complete-matrix equal-fold
+  aggregation, explicit primary/secondary objective directions, and an
+  exclusive-create selection lock tied to an evidence hash.
+- Added one runner entry point for the registered DQN and categorical PPO
+  adapters. It checks observation/action/cost parity, learns with a FitContext,
+  evaluates deterministic actions, checks learning counters and adapter
+  telemetry are unchanged during evaluation, and returns comparable resource
+  facts. The legacy pilot path was preserved.
+- Both paths reject real-data execution. No score-bearing HPO, final-test
+  selection, authoritative `run.py` change, legacy artefact edit, or model
+  performance claim was made. The policy adapters remain research-disabled.
+- Verification: focused synthetic and existing RL-contract tests passed 16/16
+  using `.venv/Scripts/python -m pytest -q -p no:cacheprovider
+  tests/test_optimisation_evaluator.py tests/test_registered_rl_runner.py
+  tests/test_rl_policy_contracts.py` with normal temporary-file access.
+
+
+## 2026-09-26 — Deep supervised engineering lane (WP3)
+
+- Added a causal per-security sequence view with explicit real-session and
+  observed-feature masks. Its scaler fits only caller-specified training row indices;
+  a target sequence contains sessions through its own T and excludes later sessions.
+- Registered research-disabled PyTorch LSTM and causal Transformer supervised
+  adapters. Both require a sequence batch and a separate stopping partition, expose
+  declarative architecture/search dimensions, record epoch losses and device/resource
+  telemetry, and save/load model state without changing `trading_pipeline.run`.
+- Added synthetic tests for causal isolation, train-only scaling, masks, parameter
+  validation, registry gate, seeded one-epoch fits and checkpoint round trips. No
+  score-bearing data, legacy run artefact or final-test result was used.
+- Verification: `.venv/Scripts/python -m pytest -q tests/test_deep_sequence_models.py
+  tests/test_supervised_model_contracts.py` passed 15 tests; `git diff --check`
+  passed. The complete suite and runner integration remain with the integration lane.
+
+
 ## 2026-09-20 — Phase 3 engineering foundations without research-policy selection
 
 - Proceeded with the approved model refactoring and multi-run reporting work while
@@ -261,3 +300,46 @@ numeric reconciliation to source comparison artefacts, contribution reconciliati
 versioned-output refusal and the complete regression suite. A read-only build against
 the preserved live reference contract also passed. The notebook now consumes generated
 reports through an explicit portable path; it has not been published.
+
+## 2026-09-26 — Bounded universe admission foundation
+
+Added `trading_pipeline.data.universe_admission` as a separate, opt-in admission
+preflight. It reads a dated candidate CSV with an exact schema (ticker, source,
+source-as-of, stable source rank and common-stock type), caps work at 500, and records
+per-ticker SEC mapping, SEC EPS/Net Income coverage and Yahoo adjusted-history status.
+SEC fundamental coverage is diagnostic and does not exclude a candidate. Mapping or
+market-history failures receive explicit exclusion reasons. The production CLI checks
+that all tickers in `configs/universe.txt` are represented in the candidate snapshot;
+it does not edit that file or invoke the standard research ingestion pipeline.
+
+Each admission snapshot has a provenance/rules manifest, append-only event log,
+immutable progress checkpoints and immutable completed JSON ledger. A matching
+snapshot resumes successful ticker checks; changed candidate bytes or preflight rules
+fail closed. The CLI stores SEC/Yahoo cache files under that snapshot's own `raw`
+directory. No live preflight or bulk download was run in this implementation task.
+
+Verification: added six synthetic/mock tests covering candidate schema and order,
+mapping and market admission, optional SEC fact coverage, explicit mapping exclusions,
+resume/idempotence, changed-snapshot rejection and the unchanged 100-name Slice 1
+config. The default system Python lacked project dependencies. The repository venv
+collected the tests, but pytest could not create/read its temporary directories under
+the managed Windows filesystem (WinError 5), so the fixture-based tests could not
+execute here. One no-fixture baseline-preservation test passed before the same temp
+directory setup issue affected remaining cases. No research data, raw caches, runs or
+`configs/universe.txt` were changed.
+
+Next live command (after preparing and reviewing the dated candidate CSV; Yahoo's
+`--end` follows its exclusive-end convention):
+
+```powershell
+$env:PYTHONPATH = 'src'
+.venv\Scripts\python.exe -m trading_pipeline.data.universe_admission `
+  --candidates data\universe_candidates_2026-09-26.csv `
+  --output data\universe_admissions `
+  --snapshot-id candidates-2026-09-26-v1 `
+  --start 2015-01-01 --end 2026-09-25 --min-sessions 260
+```
+
+The candidate source snapshot and its source/as-of provenance must be established
+before this command is run. Admission output is saved under
+`data/universe_admissions/candidates-2026-09-26-v1/`.

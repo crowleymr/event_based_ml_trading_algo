@@ -19,6 +19,13 @@ REPORT_TABLES = REPORT_TABLES_V1 + (
     "training_availability", "metric_definitions", "universe_summary",
     "field_definitions",
 )
+OPTIONAL_REPORT_TABLES = (
+    "pipeline_stage_summary", "pipeline_security_summary",
+    "architecture_trial_summary", "hpo_trial_summary", "risk_scenario_summary",
+    "model_conditioned_frontier_points", "model_conditioned_frontier_weights",
+    "realised_risk_return_curve", "final_testbench_metrics", "final_testbench_equity_curve",
+    "question_and_assumption_register",
+)
 RL_TABLES = ("policy_summary", "metrics", "equity_curve", "actions", "action_frequencies")
 RL_TELEMETRY_TABLES = ("training_trace", "training_summary", "device_benchmark")
 
@@ -54,6 +61,18 @@ def load_report(path: str | Path) -> dict:
     names = REPORT_TABLES if version == 2 else REPORT_TABLES_V1
     _verify_generated_outputs(root, provenance)
     tables = _tables(root, names)
+    declared_outputs = {
+        item.get("relative_path"): item.get("sha256")
+        for item in provenance.get("outputs", [])
+    }
+    for name in OPTIONAL_REPORT_TABLES:
+        path = root / f"{name}.parquet"
+        if path.is_file():
+            if declared_outputs.get(path.name) != _sha256(path):
+                raise ValueError(
+                    f"Optional report table is not hash-declared: {path.name}"
+                )
+            tables[name] = pl.read_parquet(path)
     benchmark = root / "device_benchmark.parquet"
     if benchmark.is_file():
         tables["device_benchmark"] = pl.read_parquet(benchmark)

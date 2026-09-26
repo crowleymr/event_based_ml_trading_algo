@@ -10,6 +10,8 @@ import shutil
 import subprocess
 import time
 import uuid
+from dataclasses import dataclass
+from typing import Any, Callable, Mapping
 
 import numpy as np
 import polars as pl
@@ -20,9 +22,82 @@ from .environment import StrategySelectorEnv
 from .policies import evaluate, fixed_action, model_action, random_action
 from .protocol import ACTION_IDS, POLICY_IDS, load_protocol
 from .device import resolve_device
+from trading_pipeline.experiments import FitContext
 from trading_pipeline.tracking.telemetry import (
     TELEMETRY_SCHEMA_VERSION, utc_now, write_training_telemetry,
 )
+
+
+@dataclass(frozen=True)
+class PolicyTrialResult:
+    """One registered policy fit and frozen evaluation pass."""
+
+    component_id: str
+    study_id: str
+    trial_id: str
+    fold_id: str
+    seed: int
+    actions: Any
+    equity_curve: Any
+    metrics: Mapping[str, Any]
+    telemetry: Mapping[str, Any]
+
+
+def run_registered_policy_trial(
+    *, component_id: str, context: FitContext,
+    train_environment: Callable[[], Any],
+    evaluation_environment: Callable[[], Any],
+    parameters: Mapping[str, Any], total_timesteps: int,
+    data_role: str, device: str = "cpu", backend_factory=None,
+    registry=None, evaluator=None,
+) -> PolicyTrialResult:
+    """Shared synthetic runner for registered DQN/PPO adapters.
+
+    It has no real-data authority; the central study gate must be completed before
+    an approved study can connect this path to the authoritative pipeline.
+    """
+    if data_role != "synthetic":
+        raise PermissionError("Registered RL runner is restricted to synthetic verification")
+    if registry is None:
+        from trading_pipeline.experiments.default_registry import default_registry
+        registry = default_registry()
+    spec = registry.spec(component_id)
+    if spec.interface != "RLPolicy" or spec.research_enabled:
+        raise ValueError("Registered policy must be a research-disabled RLPolicy")
+    policy = registry.create(component_id, parameters=parameters,
+                             total_timesteps=total_timesteps, device=device,
+                             backend_factory=backend_factory)
+    train_env, score_env = train_environment(), evaluation_environment()
+    for name in ("observation_fields", "cost_bps"):
+        if getattr(train_env, name, None) != getattr(score_env, name, None):
+            raise ValueError(f"Train/evaluation environment {name} mismatch")
+    if getattr(train_env.action_space, "n", None) != getattr(score_env.action_space, "n", None):
+        raise ValueError("Train/evaluation action spaces differ")
+    policy.learn(train_env, context=context)
+    before = dict(policy.telemetry())
+    backend = getattr(policy, "_model", None)
+    counters_before = (
+        getattr(backend, "num_timesteps", None),
+        getattr(backend, "_n_updates", None),
+        getattr(getattr(backend, "replay_buffer", None), "pos", None),
+    )
+    evaluation = evaluator or evaluate
+    actions, curve, metrics = evaluation(
+        score_env, lambda observation: policy.act(observation, deterministic=True),
+        component_id, context.seed,
+    )
+    counters_after = (
+        getattr(backend, "num_timesteps", None),
+        getattr(backend, "_n_updates", None),
+        getattr(getattr(backend, "replay_buffer", None), "pos", None),
+    )
+    if counters_after != counters_before or policy.telemetry() != before:
+        raise RuntimeError("Evaluation mutated policy learning state")
+    telemetry = {**before, "evaluation_mode": "deterministic_no_learning",
+                 "evaluation_state_unchanged": True}
+    return PolicyTrialResult(component_id, context.study_id, context.trial_id,
+                             context.fold_id, context.seed, actions, curve, metrics,
+                             telemetry)
 
 
 def _revision():

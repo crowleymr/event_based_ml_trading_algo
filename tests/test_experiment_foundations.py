@@ -115,3 +115,19 @@ def test_trial_ledger_is_immutable_and_retains_failures(tmp_path):
     write_trial_ledger(path, rows)
     with pytest.raises(FileExistsError):
         write_trial_ledger(path, rows)
+
+
+def test_expanded_closeout_draft_declares_every_requested_family_and_remains_gated():
+    study = load_study("configs/studies/expanded_closeout_draft.yaml")
+    assert study.engineering_only
+    assert {arm["component_id"] for arm in study.config["experiment_arms"]} == {
+        "supervised.elastic_net.v1", "supervised.hist_gbt.v1",
+        "supervised.xgboost.v1", "supervised.lstm.v1",
+        "supervised.causal_transformer.v1", "rl_dqn_sb3_v1",
+        "rl_ppo_categorical_sb3_v1",
+    }
+    assert study.config["search"]["architecture_is_hyperparameter"]
+    assert study.config["search"]["real_data_execution"].startswith("forbidden")
+    assert set(study.config["portfolio"]["risk_scenarios"]) == {
+        "conservative", "balanced", "aggressive",
+    }

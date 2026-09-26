@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 
 import polars as pl
@@ -26,12 +27,38 @@ def test_report_loader_is_read_only_and_schema_checked(tmp_path):
 
 
 def test_report_v2_loader_requires_expanded_contract(tmp_path):
+    from trading_pipeline.dashboard.loader import OPTIONAL_REPORT_TABLES, REPORT_TABLES
+    _write_tables(tmp_path, REPORT_TABLES)
+    pl.DataFrame({"model_id": ["lstm"]}).write_parquet(
+        tmp_path / "realised_risk_return_curve.parquet"
+    )
+    optional = tmp_path / "realised_risk_return_curve.parquet"
+    (tmp_path / "provenance.json").write_text(
+        json.dumps({
+            "report_schema_version": 2,
+            "outputs": [{
+                "relative_path": optional.name,
+                "sha256": hashlib.sha256(optional.read_bytes()).hexdigest(),
+            }],
+        }), encoding="utf-8"
+    )
+    loaded = load_report(tmp_path)["tables"]
+    assert set(REPORT_TABLES) <= set(loaded)
+    assert "realised_risk_return_curve" in loaded
+    assert "realised_risk_return_curve" in OPTIONAL_REPORT_TABLES
+
+
+def test_report_loader_rejects_undeclared_optional_table(tmp_path):
     from trading_pipeline.dashboard.loader import REPORT_TABLES
     _write_tables(tmp_path, REPORT_TABLES)
+    pl.DataFrame({"model_id": ["lstm"]}).write_parquet(
+        tmp_path / "realised_risk_return_curve.parquet"
+    )
     (tmp_path / "provenance.json").write_text(
         json.dumps({"report_schema_version": 2}), encoding="utf-8"
     )
-    assert set(load_report(tmp_path)["tables"]) == set(REPORT_TABLES)
+    with pytest.raises(ValueError, match="not hash-declared"):
+        load_report(tmp_path)
 
 
 def test_rl_loader_requires_complete_audited_exploratory_run(tmp_path):

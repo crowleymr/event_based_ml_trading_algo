@@ -1,8 +1,12 @@
+import hashlib
+import json
+
 import polars as pl
 import pytest
 
 from trading_pipeline.config import load_config
 from trading_pipeline.reporting import build_report, generate_report
+from trading_pipeline.reporting.generate import _optional_research_tables
 from trading_pipeline.run import run
 
 
@@ -89,3 +93,27 @@ def test_missing_input_fails_and_generation_is_versioned(tmp_path, report_run):
     }
     with pytest.raises(FileExistsError, match="already exists"):
         generate_report(report_run, output)
+
+
+def test_optional_research_evidence_requires_audited_hash_manifest(tmp_path):
+    evidence = tmp_path / "realised_risk_return_curve.parquet"
+    pl.DataFrame({"model_id": ["lstm"]}).write_parquet(evidence)
+    (tmp_path / "audit.json").write_text(
+        json.dumps({"passed": True}), encoding="utf-8"
+    )
+    file_hash = hashlib.sha256(evidence.read_bytes()).hexdigest()
+    (tmp_path / "research_evidence_manifest.json").write_text(
+        json.dumps({
+            "schema_version": 1,
+            "files": [{"relative_path": evidence.name, "sha256": file_hash}],
+        }), encoding="utf-8"
+    )
+    tables, dependencies = _optional_research_tables(tmp_path)
+    assert set(tables) == {"realised_risk_return_curve"}
+    assert {item["role"] for item in dependencies} == {
+        "research_evidence_audit", "research_evidence_manifest",
+        "completed_research_evidence",
+    }
+    pl.DataFrame({"model_id": ["ppo"]}).write_parquet(evidence)
+    with pytest.raises(ValueError, match="hash mismatch"):
+        _optional_research_tables(tmp_path)

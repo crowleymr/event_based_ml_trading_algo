@@ -42,6 +42,19 @@ OPTIONAL_REPORT_INPUTS = (
     "training_summary.parquet",
     "device_benchmark.parquet",
 )
+OPTIONAL_RESEARCH_INPUTS = (
+    "pipeline_stage_summary.parquet",
+    "pipeline_security_summary.parquet",
+    "architecture_trial_summary.parquet",
+    "hpo_trial_summary.parquet",
+    "risk_scenario_summary.parquet",
+    "model_conditioned_frontier_points.parquet",
+    "model_conditioned_frontier_weights.parquet",
+    "realised_risk_return_curve.parquet",
+    "final_testbench_metrics.parquet",
+    "final_testbench_equity_curve.parquet",
+    "question_and_assumption_register.parquet",
+)
 
 METRICS = {
     "total_return": ("Compounded end equity minus one", "decimal fraction"),
@@ -516,6 +529,41 @@ def _training_tables(root: Path) -> dict[str, pl.DataFrame]:
             "device_benchmark": device_benchmark}
 
 
+def _optional_research_tables(root: Path) -> tuple[dict[str, pl.DataFrame], list[dict]]:
+    """Carry forward only audited, manifest-bound research evidence."""
+    present = [name for name in OPTIONAL_RESEARCH_INPUTS if (root / name).is_file()]
+    if not present:
+        return {}, []
+    audit_path = root / "audit.json"
+    manifest_path = root / "research_evidence_manifest.json"
+    if not audit_path.is_file() or not manifest_path.is_file():
+        raise FileNotFoundError(
+            "Optional research evidence requires audit.json and research_evidence_manifest.json"
+        )
+    audit = _load_json(audit_path)
+    manifest = _load_json(manifest_path)
+    if not audit.get("passed") or manifest.get("schema_version") != 1:
+        raise ValueError("Optional research evidence must be audited under manifest schema v1")
+    declared = {
+        item.get("relative_path"): item.get("sha256")
+        for item in manifest.get("files", []) if isinstance(item, dict)
+    }
+    for name in present:
+        if declared.get(name) != digest(root / name):
+            raise ValueError(f"Optional research evidence hash mismatch or undeclared: {name}")
+    dependencies = [
+        {"relative_path": "audit.json", "sha256": digest(audit_path),
+         "role": "research_evidence_audit"},
+        {"relative_path": "research_evidence_manifest.json", "sha256": digest(manifest_path),
+         "role": "research_evidence_manifest"},
+    ] + [
+        {"relative_path": name, "sha256": digest(root / name),
+         "role": "completed_research_evidence"}
+        for name in present
+    ]
+    return {Path(name).stem: pl.read_parquet(root / name) for name in present}, dependencies
+
+
 def _rl_tables(rl_root: Path | None) -> tuple[dict[str, pl.DataFrame], list[dict]]:
     names = ("actions", "equity_curve", "metrics", "policy_summary", "action_frequencies",
              "training_trace", "training_summary", "device_benchmark")
@@ -551,11 +599,15 @@ def _field_definitions(tables: dict[str, pl.DataFrame]) -> pl.DataFrame:
         "max_abs_prediction_delta_vs_cpu": "Maximum absolute validation-prediction difference from the paired CPU diagnostic fit",
     }
     rows = []
-    for table in (
+    base_tables = (
         "split_profile", "feature_summary", "target_summary", "prediction_diagnostics",
         "prediction_deciles", "feature_importance", "benchmark_relative_series",
         "benchmark_relative_metrics", "training_trace", "training_summary", "device_benchmark",
-    ):
+    )
+    optional_tables = tuple(
+        Path(name).stem for name in OPTIONAL_RESEARCH_INPUTS if Path(name).stem in tables
+    )
+    for table in base_tables + optional_tables:
         for field in tables[table].columns:
             unit = "identifier/text"
             if any(token in field for token in ("return", "accuracy", "missing_fraction", "drawdown")):
@@ -596,6 +648,7 @@ def build_report(root: str | Path, rl_run: str | Path | None = None) -> tuple[di
     holdings, trades = _security_summaries(root, labels)
     features, feature_dependency = _feature_snapshot(root)
     rl_tables, rl_inputs = _rl_tables(Path(rl_run).resolve() if rl_run else None)
+    optional_research, optional_research_inputs = _optional_research_tables(root)
     tables = {
         "experiment_comparison": _experiment_comparison(root, selection, labels),
         "metric_definitions": pl.DataFrame([
@@ -621,6 +674,7 @@ def build_report(root: str | Path, rl_run: str | Path | None = None) -> tuple[di
         **_prediction_diagnostics(root, labels),
         **_benchmark_relative(root, labels),
         **_training_tables(root),
+        **optional_research,
         **rl_tables,
     }
     tables["field_definitions"] = _field_definitions(tables)
@@ -640,7 +694,7 @@ def build_report(root: str | Path, rl_run: str | Path | None = None) -> tuple[di
         ) + [
             {"relative_path": name, "sha256": digest(root / name)}
             for name in OPTIONAL_REPORT_INPUTS if (root / name).is_file()
-        ] + [feature_dependency] + rl_inputs,
+        ] + [feature_dependency] + optional_research_inputs + rl_inputs,
     }
     return tables, report, provenance
 

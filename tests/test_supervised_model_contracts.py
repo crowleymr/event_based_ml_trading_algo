@@ -74,8 +74,10 @@ def test_registered_adapters_fit_predict_and_preserve_train_only_state(
 
 def test_registry_metadata_and_search_spaces_are_serialisable(registry):
     assert registry.ids("SupervisedModel") == (
+        "supervised.causal_transformer.v1",
         "supervised.elastic_net.v1",
         "supervised.hist_gbt.v1",
+        "supervised.lstm.v1",
         "supervised.xgboost.v1",
     )
     for component_id in registry.ids("SupervisedModel"):
@@ -84,7 +86,7 @@ def test_registry_metadata_and_search_spaces_are_serialisable(registry):
             {"spec": model.spec.__dict__, "search_space": model.search_space()},
             sort_keys=True,
         )
-        assert '"strategy": "explicit_grid"' in encoded
+        assert '"strategy":' in encoded
         assert model.spec.capabilities["train_only_preprocessing"] is True
         with pytest.raises(ValueError, match="not enabled for research"):
             registry.create(component_id, require_research_enabled=True)
