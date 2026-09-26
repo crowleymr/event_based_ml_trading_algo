@@ -29,6 +29,13 @@ def _canonical(value: Mapping[str, Any]) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
+def protocol_content_sha256(value: Mapping[str, Any]) -> str:
+    """Hash the complete protocol with its self-referential hash field blanked."""
+    snapshot = json.loads(_canonical(value))
+    snapshot["authority"]["protocol_sha256"] = None
+    return hashlib.sha256(_canonical(snapshot).encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True)
 class ResolvedStudy:
     config: Mapping[str, Any]
@@ -67,6 +74,9 @@ def load_study(path: str | Path, *, allow_engineering_draft: bool = True) -> Res
     if engineering_only and not allow_engineering_draft:
         raise ValueError("Draft studies are restricted to engineering verification")
     if not engineering_only:
+        for name in ("authority", "data", "validation", "search", "selection", "reproducibility"):
+            if not isinstance(value[name], dict):
+                raise ValueError(f"Approved study {name} must be a mapping")
         required_paths = {
             "authority.approval_record": value["authority"].get("approval_record"),
             "authority.protocol_sha256": value["authority"].get("protocol_sha256"),
@@ -82,5 +92,18 @@ def load_study(path: str | Path, *, allow_engineering_draft: bool = True) -> Res
         final = value["validation"].get("final_holdout", {})
         if not final.get("sealed") or not final.get("manifest"):
             raise ValueError("Approved studies require a sealed final-holdout manifest")
+        if value["authority"]["protocol_sha256"] != protocol_content_sha256(value):
+            raise ValueError("Approved study protocol_sha256 does not match frozen content")
+        if value["search"].get("real_data_execution") != "enabled":
+            raise ValueError("Approved study must explicitly enable real_data_execution")
+        if value["selection"].get("final_test_selection") != "forbidden":
+            raise ValueError("Final holdout cannot be used for selection")
+        if value["data"].get("forbidden_selection_role") != "legacy_observed_final":
+            raise ValueError("Legacy observed final must be excluded from selection")
+        seeds = value["reproducibility"].get("seeds")
+        if (not isinstance(seeds, list) or not seeds
+                or any(type(seed) is not int for seed in seeds)
+                or len(seeds) != len(set(seeds))):
+            raise ValueError("Approved study requires unique integer seeds")
     encoded = _canonical(value).encode("utf-8")
     return ResolvedStudy(value, hashlib.sha256(encoded).hexdigest(), engineering_only)

@@ -23,6 +23,27 @@ This plan supersedes the scope-freeze priority in `docs/close_out/SUBMISSION_CLO
 
 ## 2. Current-state review
 
+### Execution checkpoint — 26 September 2026, evening
+
+This checkpoint records implementation status, not research completion. It does not
+replace generated run evidence or the acceptance criteria below.
+
+| Work package | Executed state | Remaining gate |
+|---|---|---|
+| WP0/WP2 authority | `trading_pipeline.run --study` now validates an approved, self-hashed protocol and six pinned manifests before any research I/O. Legacy `--config` behaviour is regression-tested. | The checked-in expanded study is deliberately unresolved. Central score-bearing orchestration, append-only trial/fit ledgers, outer selection lock and immutable run/audit output are not yet implemented. |
+| WP1 universe | A dated 503-row S&P 500 constituent snapshot and deterministic baseline-first 500-candidate CSV/TXT now exist; all original 100 and all candidate CIKs reconcile to the frozen SEC map. | Final-provenance admission `sp500-20260926-v3` is running resumably in a separate data root under the corrected sufficient-history rule. Stopped v1/v2 attempts are preliminary only and must not be cited as admission evidence. Freeze the achieved count only after v3 seals `admission.json`. |
+| WP3 deep supervised | Causal LSTM/Transformer adapters and an evaluator-fold execution bridge have architecture parameters, train-only scaling, distinct stopping/scoring windows, canonical predictions and telemetry tests. | Invoke the bridge only from the future central study orchestrator; no real-data deep HPO result exists yet. |
+| WP4 RL | Registered DQN/PPO backends, PPO parameter telemetry and an actual synthetic PPO fit are tested. | Direct real-data calls remain intentionally forbidden until the central runner owns authority, ledgers, persistence and audit. No real PPO comparison exists yet. |
+| WP7 dashboard | The read-only dashboard now leads with an executive graphical story, shows validation/test side by side, uses a run dropdown and keeps evidence tables behind drill-down controls. It passes headless AppTest and is runnable on the existing audited report. | Expanded HPO/frontier/risk/test-bench views remain correctly empty until WP6 emits their hash-declared tables. |
+| WP8 notebook | The educational notebook explains concepts, methodology, metric direction, evidence limits and code links; all relative links resolve and clean `nbconvert --execute` succeeds on the existing audited report. | Regenerate and re-execute after WP6/WP7 evidence exists; public URL/licensing remains a recorded human publication decision. |
+| WP9 verification | Full automated suite passes 116 tests; the legacy route and fail-closed expanded authority boundaries are included. | Repeat full suite, run audit, report regeneration, notebook execution and matrix-completeness checks after the final expanded run. |
+
+The immediate critical path is therefore: finish and seal v2 admission; generate the
+fresh-vintage, exposure, inner/outer-window and holdout manifests; resolve and hash the
+study protocol; implement the central study orchestrator; execute the frozen feasible
+budget; then regenerate WP7/WP8 evidence and perform WP9. Missing score-bearing results
+must continue to display as unavailable rather than being inferred from synthetic tests.
+
 | Area | Verified state | Close-out gap |
 |---|---|---|
 | Baseline | Completed E0-E7/B0 evidence, fixed 100-stock universe, audited immutable run | Preserve it as the fallback and legacy comparison; never rewrite it |

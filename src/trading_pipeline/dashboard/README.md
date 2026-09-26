@@ -7,7 +7,7 @@ completed audited RL run. It cannot train, tune, regenerate reports or modify ru
 .venv/Scripts/python -m trading_pipeline.dashboard `
   --report reports/20260920T010939Z-1225374b/v1 `
   --rl-run runs/rl/20260920T002714Z-9c9692fc `
-  --catalog reports/catalog/v1
+  --catalog reports/catalog/20260920T121854Z-ac1ac5c4-v1
 ```
 
 The fixed/random RL harness can be omitted by leaving out `--rl-run`. Report schema v2
@@ -18,6 +18,12 @@ the UI never reconstructs unavailable training histories.
 Training Diagnostics provides one family/metric-filtered surface over the common trace
 contract. Histogram GBT and XGBoost use boosting round on the x-axis and decimal-return
 RMSE on the y-axis; DQN retains its recorded step and native reward/loss semantics.
+The overview is a graphical executive summary: it introduces the experiment families,
+shows validation and descriptive test outcomes side by side, identifies the highest and
+lowest descriptive Sharpe under the selected evidence lens, and places portfolio growth
+against the market front and centre. Tables and hash detail remain available in expanders.
+When a catalogue is supplied, its audited runs are explored through a single run dropdown.
+
 Run ID, device, split role and protocol status are shown with summaries and CPU/GPU
 benchmarks. Elastic Net explicitly reports that no conventional epoch/boosting curve
 applies.

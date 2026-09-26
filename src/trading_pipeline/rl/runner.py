@@ -49,15 +49,19 @@ def run_registered_policy_trial(
     evaluation_environment: Callable[[], Any],
     parameters: Mapping[str, Any], total_timesteps: int,
     data_role: str, device: str = "cpu", backend_factory=None,
-    registry=None, evaluator=None,
+    registry=None, evaluator=None, study=None, authority=None,
+    repository_root: str | Path | None = None,
 ) -> PolicyTrialResult:
-    """Shared synthetic runner for registered DQN/PPO adapters.
+    """Run registered DQN/PPO adapters for synthetic engineering verification.
 
-    It has no real-data authority; the central study gate must be completed before
-    an approved study can connect this path to the authoritative pipeline.
+    A verified protocol alone cannot authorize a direct score-bearing trial. The
+    central study runner must own fold access, ledgers and immutable persistence
+    before this boundary can be opened for real data.
     """
     if data_role != "synthetic":
-        raise PermissionError("Registered RL runner is restricted to synthetic verification")
+        raise PermissionError(
+            "Real-data RL requires central study orchestration with ledgers and immutable artefacts"
+        )
     if registry is None:
         from trading_pipeline.experiments.default_registry import default_registry
         registry = default_registry()

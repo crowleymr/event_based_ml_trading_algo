@@ -133,9 +133,12 @@ The output directory must be new. It contains CSV and Parquet tables, a Markdown
 report and provenance JSON. Reporting never retrains, selects or changes the source run.
 
 Open [the final evidence notebook](notebooks/final_evidence.ipynb) for the read-only
-end-to-end narrative, source-code links, security drill-down, architecture/HPO evidence,
-risk scenarios, model-conditioned frontiers, realised risk-return curves and final
-benchmark comparison. Set `TRADING_REPORT_DIR` to the generated report to inspect.
+methodology narrative, source-code links and generated report explorer. It displays
+security contribution and any architecture/HPO, risk-scenario, frontier and realised
+risk-return tables present in the selected report; absent optional tables are identified
+as unavailable rather than inferred. Set `TRADING_REPORT_DIR` to a generated report
+directory containing `provenance.json`. See [Public Notebook Preparation](docs/PUBLIC_NOTEBOOK.md)
+for the hosted-notebook and optional dashboard workflow.
 
 The approved supervised diagnostic rerun is `runs/20260920T010939Z-1225374b` and its
 combined supervised/DQN dashboard report is `reports/20260920T010939Z-1225374b/v1`.

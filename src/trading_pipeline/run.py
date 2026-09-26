@@ -26,6 +26,8 @@ from trading_pipeline.environment import detect_environment, model_devices
 from trading_pipeline.audit import audit
 from trading_pipeline.tracking.artefacts import input_vintage, json_write, plots
 from trading_pipeline.tracking.telemetry import write_training_telemetry
+from trading_pipeline.experiments.schema import load_study
+from trading_pipeline.experiments.authority import verify_study_authority
 
 
 def run(cfg):
@@ -254,10 +256,21 @@ def run(cfg):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--config", help="Locked Slice 1 pipeline config")
+    source.add_argument("--study", help="Expanded optimisation study protocol")
     parser.add_argument("--ingest-only", action="store_true")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if args.study:
+        if args.ingest_only:
+            parser.error("--ingest-only applies only to --config")
+        study = load_study(args.study, allow_engineering_draft=False)
+        verify_study_authority(study, repository_root=Path(__file__).resolve().parents[2])
+        raise RuntimeError(
+            "Expanded study authority verified, but score-bearing study execution "
+            "is not integrated; no data or holdout was opened"
+        )
     cfg = load_config(args.config)
     if args.ingest_only:
         ingest(cfg)

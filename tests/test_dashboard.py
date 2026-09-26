@@ -6,6 +6,7 @@ import polars as pl
 import pytest
 
 from trading_pipeline.dashboard import load_report, load_rl_run
+from trading_pipeline.dashboard.app import _metric_label, _model_kind, _overview_frame
 
 
 def _write_tables(root, names):
@@ -71,3 +72,24 @@ def test_rl_loader_requires_complete_audited_exploratory_run(tmp_path):
     (tmp_path / "audit.json").write_text(json.dumps({"passed": False}), encoding="utf-8")
     with pytest.raises(ValueError, match="completed, audited"):
         load_rl_run(tmp_path)
+
+
+def test_overview_story_classifies_models_and_keeps_both_evidence_splits():
+    comparison = pl.DataFrame({
+        "experiment_id": ["E1", "E1", "R1"],
+        "display_label": ["Elastic Net", "Elastic Net", "PPO"],
+        "estimator_label": ["Elastic Net", "Elastic Net", "Categorical PPO"],
+        "portfolio_label": ["Top 10", "Top 10", "Sleeve selector"],
+        "split": ["validation", "test", "test"],
+        "sharpe": [0.5, 0.4, 0.3],
+    })
+
+    overview = _overview_frame(comparison, ["E1", "R1"])
+
+    assert set(overview["split"]) == {"validation", "test"}
+    assert set(overview["model_kind"]) == {
+        "Classical supervised", "Reinforcement learning",
+    }
+    assert _model_kind("causal Transformer") == "Deep supervised"
+    assert _model_kind("Broad-market price baseline") == "Fixed baseline"
+    assert _metric_label("sharpe") == "Sharpe ratio"

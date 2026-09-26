@@ -1,5 +1,52 @@
 # Implementation log
 
+## 2026-09-26 — Registered deep/PPO fold execution bridge (WP3/WP4)
+
+- Added `optimisation.model_execution.fit_predict_supervised` for evaluator-owned,
+  disjoint chronological fit/stopping/score partitions. It fits the sequence scaler
+  on fit rows only, builds causal per-security windows, trains a registered LSTM or
+  causal Transformer with the trial's architecture and `FitContext`, then emits the
+  canonical prediction fields and fit/resource telemetry. Scoring labels can be
+  absent; fit/stopping label intervals must end before the next partition.
+- The registered RL runner now accepts real-data DQN/PPO calls only with a resolved
+  approved study and a matching authority object freshly reverified against its
+  pinned manifests. Its existing synthetic path remains available. Fixed the
+  Gymnasium `Discrete.n` NumPy-integer validation and added policy parameter count
+  to resource telemetry.
+- An actual Stable-Baselines3 categorical PPO synthetic fit verifies learning,
+  deterministic action evaluation, resource counters and no learning-state change.
+  It is software evidence, not a trading result. The current draft study remains
+  fail-closed and no expanded-data score-bearing run was performed.
+- Verification: `.venv/Scripts/python -m pytest -q -p no:cacheprovider
+  tests/test_registered_rl_runner.py tests/test_model_execution_bridge.py
+  tests/test_rl_policy_contracts.py tests/test_deep_sequence_models.py
+  tests/test_study_authority.py` passed 27 tests.
+
+## 2026-09-26 — Expanded-study authority gate and runner dispatch (WP0/WP2)
+
+- Added a separate `--study` entry to the authoritative `trading_pipeline.run` CLI.
+  The existing `--config` Slice 1 route and selection code were not changed. Draft
+  studies fail before ingestion or run-directory creation; a fully verified study
+  currently stops explicitly before scoring because study execution remains
+  unintegrated.
+- Approved study schema now requires a content-matching protocol SHA-256, explicit
+  real-data enablement, unique integer seeds, exploratory claim status, and continued
+  prohibition of final-holdout and legacy observed-final selection.
+- Added a read-only authority verifier for six repository-relative, SHA-256-pinned
+  inputs: approval record, vintage snapshot, exposure ledger, outer and inner fold
+  manifests, and sealed descriptive holdout. It checks study/vintage identity,
+  chronological fold separation, inner-fold containment and holdout disjointness;
+  it returns a frozen authority record for downstream gates.
+- The checked-in expanded study remains a draft with unresolved vintage and
+  manifests. No real-data optimisation, observed-test selection, or source-run
+  artefact mutation occurred. The manifest JSON shape required by the verifier is
+  exercised in `tests/test_study_authority.py` and needs producers in the eventual
+  expanded-data workflow.
+- Verification: 14 focused study/experiment/evaluator tests passed with an approved
+  pytest temporary-directory permission. The first two restricted attempts failed
+  at pytest fixture setup because Windows denied its temporary directories; those
+  failures did not exercise application logic.
+
 ## 2026-09-26 — Temporal evaluator and registered RL engineering lane (WP2/WP4)
 
 - Added a synthetic-only nested temporal evaluator over predeclared outer/inner
@@ -343,3 +390,102 @@ $env:PYTHONPATH = 'src'
 The candidate source snapshot and its source/as-of provenance must be established
 before this command is run. Admission output is saved under
 `data/universe_admissions/candidates-2026-09-26-v1/`.
+
+## 2026-09-26 — WP1 dated candidate freeze and admission hardening
+
+Frozen a 503-row current S&P 500 constituent enumeration from the Wikipedia
+component table retrieved on 26 September 2026, retaining displayed symbol,
+CIK and order in `configs/sp500_constituents_2026-09-26.csv`. The repeatable
+builder places the unchanged 100-name baseline first and appends unique
+constituents in source order, capped at 500. Its generated CSV and ticker-only
+mirror are `configs/universe_candidates_500.csv` and `.txt`; they are
+**candidates, not admitted securities**. The source/candidate/baseline SHA256
+values and reproduction command are recorded in
+`configs/UNIVERSE_CANDIDATES_2026-09-26.md`. The 500 candidate source CIKs
+matched the preserved SEC mapping in a read-only exact-match check. No large-cap
+rank is inferred from SEC row order.
+
+Admission now checks each candidate's source CIK against SEC, preserves the
+baseline order, admits later-listed securities with sufficient sessions through
+the required end date, validates the 20-session warm-up plus five-day label minimum, and records
+preflight F0/F1 readiness separately. Yahoo request errors remain pending and
+are retried on resume; a final immutable ledger is sealed only when every
+candidate has a definitive admitted/excluded outcome. The CLI records source
+and SEC mapping hashes in the immutable manifest, and caches each successful
+Yahoo raw frame in the isolated expanded root without replacing an existing
+cache. The manifest includes the admission-code hash and source/mapping hashes;
+each ledger row includes paths and hashes for available raw SEC/Yahoo files.
+Existing Slice 1 files and runs were not modified.
+
+Verification: the candidate builder reproduced the checked-in CSV byte for
+byte; the text mirror matched all 500 CSV tickers in order; all source CIKs
+matched the preserved SEC mapping. Added tests for builder order/immutability,
+CIK mismatch exclusion and retry of transient Yahoo failure. The initial
+sandboxed pytest run could not access its temporary fixtures (WinError 5).
+Running the same focused suite with the permitted fixture write access gave
+**11 passed in 6.79 seconds** on the final code, including the checked-in
+source/candidate mirror, SEC identity and later-listing regressions. Earlier
+live preflight attempts under `data/universe_admissions/sp500-20260926-v1/`
+and `sp500-20260926-v2/` are superseded engineering checkpoints. A fresh
+snapshot ID is required after this rule change because the admission-code
+hash is in the immutable manifest. No completed admission count or expanded
+security master is claimed here. The dated source and deterministic live
+command are recorded in the candidate provenance document.
+
+Added `trading_pipeline.data.admitted_universe` as a separate post-admission
+freeze step. It requires a sealed ledger, reconciles every candidate and all
+requested/admitted/excluded/F0/F1 counts, checks source CIKs and available raw
+artifact hashes, then writes an ordered admitted-universe text file, expanded
+security-master Parquet and source manifest with input/output SHA256 values in a
+fresh directory. It refuses to overwrite an existing derived snapshot. A
+synthetic fixture test passed, and the combined WP1 focused suite passed
+**12 tests in 7.14 seconds**. This derived step has not yet been run on live
+data because the final admission ledger is still being built.
+
+## 2026-09-26 — Cross-lane integration checkpoint
+
+Reviewed the study authority, registered RL trial, deep supervised fold bridge,
+universe admission, dashboard and notebook work against the locked Slice 1
+evidence and the expanded close-out plan. The central `--study` route verifies
+approval and pinned manifests, then stops before opening score-bearing data.
+The deep supervised bridge can execute a supplied fold for synthetic software
+verification, but the real-data evaluator, trial/fit ledger orchestration,
+outer-fold procedure lock, immutable study run contract and audit are not yet
+connected to `trading_pipeline.run`. No expanded research result is claimed.
+
+Closed a direct-call authority gap in the registered RL trial runner: even a
+valid approved-study object and verified input manifests cannot execute a
+non-synthetic RL trial until the central study path owns those missing gates.
+Synthetic DQN/PPO adapter verification and telemetry remain available. Added
+negative coverage for that valid-authority direct call and CLI routing tests
+for the unchanged `--config` run and ingestion-only paths.
+
+Verification: `.venv\Scripts\python.exe -m pytest -q --basetemp=.pytest-integration-full-20260926`
+passed 111 tests before the final gate correction and CLI additions;
+`.venv\Scripts\python.exe -m pytest -q --basetemp=.pytest-boundary-20260926 tests/test_study_authority.py tests/test_registered_rl_runner.py tests/test_run_entrypoints.py`
+passed 11 tests after those changes. These commands required working pytest
+temporary-directory permissions under the managed Windows filesystem. The
+staged dashboard feedback file and immutable source runs were not changed.
+Final full regression command:
+`.venv\Scripts\python.exe -m pytest -q --basetemp=.pytest-integration-final-20260926`;
+116 tests passed in 55.58 seconds.
+
+## 2026-09-26 — WP8 notebook documentation close-out
+
+Clarified the executable evidence notebook's research-status and source boundaries:
+its displayed values come from the selected generated report, optional expanded-study
+tables are only shown when present, and declared report output hashes are checked by
+the read-only report loader. Added explicit metric-direction notes, the T+1 execution
+versus five-session label caveat, and a reminder that the completed Slice 1 final test
+is descriptive and cannot guide selection. Added the repository-root dashboard launch
+command and report path requirement, and expanded student-owned reflection prompts.
+Updated the README and public-notebook preparation page to link the notebook workflow
+and avoid claiming unavailable optional evidence or a published URL.
+
+Verification: manually checked the notebook's repository-relative source links and
+confirmed the referenced implementation paths exist. `jupyter nbconvert --version`
+reported 7.17.1. One `jupyter nbconvert --to notebook --execute` attempt was blocked
+before kernel startup with Windows `WinError 5` writing Jupyter's secure connection
+file; the environment also lacks `win32api` (pywin32), and the fallback Windows ACL
+operation was denied. No numeric result was added or recomputed, and no run/report
+artefact was changed. The public URL and licensing decision remain pending human review.

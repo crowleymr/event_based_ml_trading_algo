@@ -1,11 +1,13 @@
 import csv
 import json
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from trading_pipeline.data.universe_admission import (
     CANDIDATE_FIELDS,
+    build_sp500_candidate_snapshot,
     load_candidates,
     run_admission,
 )
@@ -17,7 +19,8 @@ def _candidates(path, tickers=("AAA", "BBB")):
         writer.writeheader()
         for rank, ticker in enumerate(tickers, start=1):
             writer.writerow({"ticker": ticker, "source": "test-fixture", "source_as_of": "2026-09-25",
-                             "source_rank": rank, "security_type": "common_stock"})
+                             "source_rank": rank, "security_type": "common_stock",
+                             "source_cik": f"{rank:010d}"})
     return path
 
 
@@ -83,6 +86,62 @@ def test_missing_sec_mapping_is_explicit_exclusion(tmp_path):
     assert row["yahoo"]["status"] == "not_checked"
 
 
+def test_source_cik_mismatch_excludes_without_yahoo_request(tmp_path):
+    source = _candidates(tmp_path / "candidates.csv", ("AAA",))
+    result = run_admission(
+        source, tmp_path / "out", snapshot_id="mismatch-v1", start="2025-01-01",
+        end="2026-09-25", min_sessions=200,
+        sec_mapping_loader=lambda: {"0": {"ticker": "AAA", "cik_str": 2}},
+        sec_facts_loader=lambda _: pytest.fail("Facts must not be queried"),
+        yahoo_loader=lambda _: pytest.fail("Yahoo must not be queried"),
+    )
+    assert result["ledger"][0]["exclusion_reasons"] == ["sec_cik_mismatch"]
+
+
+def test_transient_yahoo_failure_is_pending_and_retried(tmp_path):
+    source = _candidates(tmp_path / "candidates.csv", ("AAA",))
+    calls = []
+    def yahoo(_):
+        calls.append(1)
+        if len(calls) == 1:
+            raise ConnectionError("offline")
+        return _frame()
+    args = dict(snapshot_id="retry-v1", start="2025-01-01", end="2026-09-25",
+                min_sessions=200, sec_mapping_loader=lambda: {"0": {"ticker": "AAA", "cik_str": 1}},
+                sec_facts_loader=lambda _: {}, yahoo_loader=yahoo)
+    first = run_admission(source, tmp_path / "out", **args)
+    assert first["pending_count"] == 1
+    assert not (tmp_path / "out/retry-v1/admission.json").exists()
+    second = run_admission(source, tmp_path / "out", **args)
+    assert second["admitted_count"] == 1
+    assert len(calls) == 2
+
+
+def test_later_listing_with_sufficient_history_is_admitted(tmp_path):
+    source = _candidates(tmp_path / "candidates.csv", ("AAA",))
+    result = run_admission(
+        source, tmp_path / "out", snapshot_id="later-listing-v1", start="2015-01-02",
+        end="2026-09-25", min_sessions=260,
+        sec_mapping_loader=lambda: {"0": {"ticker": "AAA", "cik_str": 1}},
+        sec_facts_loader=lambda _: {}, yahoo_loader=lambda _: _frame(),
+    )
+    row = result["ledger"][0]
+    assert row["admitted"]
+    assert row["yahoo"]["first_date"] == "2025-01-01"
+    assert row["f0_preflight_ready"]
+
+
+def test_candidate_builder_preserves_baseline_and_source_order(tmp_path):
+    source = tmp_path / "source.csv"
+    source.write_text("symbol,cik,source_rank\nCCC,3,1\nAAA,1,2\nBBB,2,3\n", encoding="utf-8")
+    baseline = tmp_path / "baseline.txt"
+    baseline.write_text("BBB\nAAA\n", encoding="utf-8")
+    path = tmp_path / "candidates.csv"
+    assert build_sp500_candidate_snapshot(source, baseline, path, as_of="2026-09-26") == ["BBB", "AAA", "CCC"]
+    assert [item["source_cik"] for item in load_candidates(path)] == ["0000000002", "0000000001", "0000000003"]
+    assert build_sp500_candidate_snapshot(source, baseline, path, as_of="2026-09-26") == ["BBB", "AAA", "CCC"]
+
+
 def test_resume_rejects_candidate_snapshot_change(tmp_path):
     source = _candidates(tmp_path / "candidates.csv", ("AAA",))
     mapping = {"0": {"ticker": "AAA", "cik_str": 1}}
@@ -97,3 +156,19 @@ def test_resume_rejects_candidate_snapshot_change(tmp_path):
 def test_existing_slice1_universe_remains_100_names():
     names = open("configs/universe.txt", encoding="utf-8").read().split()
     assert len(names) == len(set(names)) == 100
+
+
+def test_frozen_candidate_mirror_and_sec_identity():
+    source = Path("configs/sp500_constituents_2026-09-26.csv")
+    candidates = load_candidates("configs/universe_candidates_500.csv")
+    tickers = [row["ticker"] for row in candidates]
+    baseline = Path("configs/universe.txt").read_text(encoding="utf-8").split()
+    assert len(candidates) == 500
+    assert tickers[:len(baseline)] == baseline
+    assert tickers == Path("configs/universe_candidates_500.txt").read_text(encoding="utf-8").split()
+    assert build_sp500_candidate_snapshot(source, "configs/universe.txt",
+                                          "configs/universe_candidates_500.csv", as_of="2026-09-26") == tickers
+    mapping = json.loads(Path("data/raw/sec/company_tickers_exchange.json").read_text(encoding="utf-8"))
+    from trading_pipeline.data.universe_admission import sec_mapping_status
+    assert all(sec_mapping_status(row["ticker"], mapping)["cik"] == row["source_cik"]
+               for row in candidates)

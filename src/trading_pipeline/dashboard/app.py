@@ -47,6 +47,36 @@ def _filtered(frame, split=None, experiments=None):
     return value
 
 
+def _model_kind(estimator: object) -> str:
+    """Return a presentation-only family label without changing model identity."""
+    label = str(estimator).lower()
+    if "ppo" in label or "dqn" in label or "reinforcement" in label:
+        return "Reinforcement learning"
+    if "lstm" in label or "transformer" in label:
+        return "Deep supervised"
+    if any(token in label for token in ("elastic", "gradient", "xgboost", "gbt")):
+        return "Classical supervised"
+    return "Fixed baseline"
+
+
+def _overview_frame(comparison: pl.DataFrame, experiments: list[str]) -> pd.DataFrame:
+    """Build chart-ready overview data from the immutable comparison table."""
+    frame = _filtered(comparison, experiments=experiments).to_pandas()
+    frame = frame[frame["split"].isin(["validation", "test"])].copy()
+    frame["model_kind"] = frame["estimator_label"].map(_model_kind)
+    frame["model"] = frame["experiment_id"] + " · " + frame["display_label"]
+    return frame
+
+
+def _metric_label(name: str) -> str:
+    return {
+        "total_return": "Total return",
+        "annualised_return": "Annualised return",
+        "sharpe": "Sharpe ratio",
+        "maximum_drawdown": "Maximum drawdown",
+    }.get(name, name.replace("_", " ").capitalize())
+
+
 def main():
     args = _arguments()
     provenance, tables = _report(str(Path(args.report).resolve()))
@@ -57,8 +87,8 @@ def main():
     splits = sorted(tables["experiment_comparison"]["split"].unique().to_list())
     experiments = sorted(tables["experiment_comparison"]["experiment_id"].unique().to_list())
     with st.sidebar:
-        st.header("Evidence filters")
-        split = st.selectbox("Split", splits, index=splits.index("test") if "test" in splits else 0)
+        st.header("Comparison controls")
+        split = st.selectbox("Detail split", splits, index=splits.index("test") if "test" in splits else 0)
         selected = st.multiselect("Experiments", experiments, default=experiments)
         st.caption(f"Report schema v{provenance.get('report_schema_version')}")
 
@@ -68,54 +98,148 @@ def main():
         "Backtest & Benchmark", "Securities",
     ])
     with tabs[0]:
-        st.subheader("Immutable evidence and research status")
-        st.json({
-            "source_run_id": provenance.get("source_run_id"),
-            "source_run_git_commit": provenance.get("source_run_git_commit"),
-            "report_code_revision": provenance.get("report_code_revision"),
-            "generated_at": provenance.get("generated_at"),
-            "input_hashes": provenance.get("inputs"),
-        }, expanded=False)
-        st.dataframe(_filtered(tables["experiment_comparison"], split, selected).to_pandas(), width="stretch")
+        st.header("From point-in-time data to after-cost portfolio evidence")
+        st.markdown(
+            "This study compares fixed baselines and supervised models using the same "
+            "market/fundamental information, leakage-controlled splits, T+1 execution and "
+            "transaction-cost accounting. Validation supports selection; the observed test "
+            "period is descriptive only."
+        )
+        overview = _overview_frame(tables["experiment_comparison"], selected)
+        chosen = overview[overview["split"] == split]
+        ranked = chosen.dropna(subset=["sharpe"]).sort_values("sharpe", ascending=False)
+        universe = tables.get("universe_summary")
+        security_count = (
+            int(universe["security_count"][0])
+            if universe is not None and not universe.is_empty() and "security_count" in universe.columns
+            else "Not recorded"
+        )
+        with st.container(horizontal=True):
+            st.metric("Securities", security_count, border=True)
+            st.metric("Experiments", int(chosen["experiment_id"].nunique()), border=True)
+            st.metric("Evidence lens", split.capitalize(), border=True)
+            if not ranked.empty:
+                st.metric(
+                    f"Highest {split} Sharpe",
+                    str(ranked.iloc[0]["experiment_id"]),
+                    f"{ranked.iloc[0]['sharpe']:.2f}",
+                    border=True,
+                )
+                st.metric(
+                    f"Lowest {split} Sharpe",
+                    str(ranked.iloc[-1]["experiment_id"]),
+                    f"{ranked.iloc[-1]['sharpe']:.2f}",
+                    border=True,
+                )
+
+        st.subheader("Validation versus test")
+        st.caption(
+            "Large validation-to-test changes are a generalisation warning, not proof of "
+            "overfitting. Test outcomes were not used to select or reject models."
+        )
+        metric = st.selectbox(
+            "Comparison metric",
+            ["sharpe", "total_return", "annualised_return", "maximum_drawdown"],
+            format_func=_metric_label,
+            key="overview_metric",
+        )
+        if not overview.empty:
+            st.bar_chart(
+                overview,
+                x="model",
+                y=metric,
+                color="split",
+                x_label="Experiment",
+                y_label=_metric_label(metric),
+                stack=False,
+            )
+
+        st.subheader("Portfolio growth against the market")
+        overview_series = _filtered(tables["equity_drawdown_series"], split, selected).to_pandas()
+        if not overview_series.empty:
+            st.line_chart(
+                overview_series,
+                x="session_date",
+                y="equity",
+                color="display_label",
+                x_label="Session date",
+                y_label="Growth of one unit",
+            )
+
+        with st.expander("Models, metrics and immutable provenance"):
+            if not overview.empty:
+                landscape = (
+                    overview[["experiment_id", "display_label", "model_kind", "estimator_label", "portfolio_label"]]
+                    .drop_duplicates()
+                    .sort_values(["model_kind", "experiment_id"])
+                )
+                st.dataframe(landscape, hide_index=True)
+            if "metric_definitions" in tables:
+                st.markdown("**Metric glossary**")
+                st.dataframe(tables["metric_definitions"].to_pandas(), hide_index=True)
+            st.markdown("**Evidence lineage**")
+            st.json({
+                "source_run_id": provenance.get("source_run_id"),
+                "source_run_git_commit": provenance.get("source_run_git_commit"),
+                "report_code_revision": provenance.get("report_code_revision"),
+                "generated_at": provenance.get("generated_at"),
+                "input_hashes": provenance.get("inputs"),
+            }, expanded=False)
         if args.catalog:
             catalog_provenance, catalog_tables = _catalog(str(Path(args.catalog).resolve()))
-            st.subheader("Audited multi-run catalogue")
             runs = catalog_tables["runs"].to_pandas()
             run_ids = runs["run_id"].tolist()
-            chosen_runs = st.multiselect(
-                "Runs", run_ids, default=run_ids, key="catalog_run_ids"
+            default_run = provenance.get("source_run_id")
+            default_index = run_ids.index(default_run) if default_run in run_ids else len(run_ids) - 1
+            chosen_run = st.selectbox(
+                "Audited run", run_ids, index=max(default_index, 0), key="catalog_run_id"
             )
-            selected_runs = runs[runs["run_id"].isin(chosen_runs)]
-            st.dataframe(selected_runs, width="stretch")
-            if selected_runs["compatibility_key"].nunique() > 1:
-                st.warning(
-                    "Selected runs have different compatibility keys and must not be pooled "
-                    "or ranked as a fair comparison."
-                )
+            selected_runs = runs[runs["run_id"] == chosen_run]
             metrics = catalog_tables.get("metrics")
             if metrics is not None and not metrics.is_empty():
-                selected_metrics = metrics.filter(pl.col("run_id").is_in(chosen_runs))
-                st.dataframe(selected_metrics.to_pandas(), width="stretch")
-            st.caption(
-                f"Catalogue schema v{catalog_provenance.get('schema_version')}; "
-                "only complete audited runs are indexed."
-            )
-        if "metric_definitions" in tables:
-            st.dataframe(tables["metric_definitions"].to_pandas(), width="stretch")
+                selected_metrics = metrics.filter(pl.col("run_id") == chosen_run).to_pandas()
+                if not selected_metrics.empty and "sharpe" in selected_metrics.columns:
+                    st.bar_chart(
+                        selected_metrics,
+                        x="experiment_id",
+                        y="sharpe",
+                        color="split" if "split" in selected_metrics.columns else None,
+                        stack=False,
+                    )
+            with st.expander("Selected run record"):
+                st.dataframe(selected_runs, hide_index=True)
+                st.caption(
+                    f"Catalogue schema v{catalog_provenance.get('schema_version')}; "
+                    "only complete audited runs are indexed."
+                )
 
     with tabs[1]:
         if "pipeline_stage_summary" in tables:
             st.subheader("End-to-end pipeline funnel")
-            st.dataframe(tables["pipeline_stage_summary"].to_pandas(), width="stretch")
+            funnel = tables["pipeline_stage_summary"].to_pandas()
+            numeric = [name for name in funnel.columns if pd.api.types.is_numeric_dtype(funnel[name])]
+            if numeric:
+                st.bar_chart(funnel, x=funnel.columns[0], y=numeric[0])
+            with st.expander("Pipeline-stage evidence table"):
+                st.dataframe(funnel, hide_index=True)
         if "split_profile" not in tables:
             st.info("Data and split diagnostics were not recorded in this report version.")
         else:
             st.subheader("Coverage and target availability")
-            st.dataframe(tables["split_profile"].to_pandas(), width="stretch")
+            split_profile = tables["split_profile"].to_pandas()
+            if "rows" in split_profile.columns:
+                st.bar_chart(split_profile, x="split", y="rows")
+            with st.expander("Split evidence table"):
+                st.dataframe(split_profile, hide_index=True)
             st.subheader("Feature missingness and distributions")
-            st.dataframe(_filtered(tables["feature_summary"], split).to_pandas(), width="stretch")
+            features = _filtered(tables["feature_summary"], split).to_pandas()
+            if {"feature", "missing_fraction"} <= set(features.columns):
+                st.bar_chart(features, x="feature", y="missing_fraction")
+            with st.expander("Feature evidence table"):
+                st.dataframe(features, hide_index=True)
             st.subheader("Target distribution")
-            st.dataframe(_filtered(tables["target_summary"], split).to_pandas(), width="stretch")
+            with st.expander("Target evidence table", expanded=True):
+                st.dataframe(_filtered(tables["target_summary"], split).to_pandas(), hide_index=True)
 
     with tabs[2]:
         if "prediction_diagnostics" not in tables:

@@ -10,6 +10,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from pathlib import Path
 import math
+from numbers import Integral
 import time
 from typing import Any, Callable, Mapping
 
@@ -128,7 +129,7 @@ class StableBaselinesPolicyAdapter(RLPolicy):
     def _validate_discrete_environment(environment: Any) -> None:
         action_space = getattr(environment, "action_space", None)
         count = getattr(action_space, "n", None)
-        if isinstance(count, bool) or not isinstance(count, int) or count < 2:
+        if isinstance(count, bool) or not isinstance(count, Integral) or count < 2:
             raise ValueError("RL policy requires a discrete action space with at least two actions")
 
     def learn(self, environment: Any, *, context: FitContext) -> "StableBaselinesPolicyAdapter":
@@ -167,11 +168,21 @@ class StableBaselinesPolicyAdapter(RLPolicy):
             "environment_steps_requested": steps,
             "environment_steps_completed": int(getattr(self._model, "num_timesteps", steps)),
             "gradient_updates": self._gradient_updates(),
+            "parameter_count": self._parameter_count(),
             "actual_device": str(getattr(self._model, "device", "unknown")),
             "duration_seconds": time.perf_counter() - started,
             "backend_metrics": self._backend_metrics(),
         })
         return self
+
+    def _parameter_count(self) -> int | None:
+        if self._model is None:
+            return None
+        policy = getattr(self._model, "policy", None)
+        parameters = getattr(policy, "parameters", None)
+        if not callable(parameters):
+            return None
+        return sum(int(parameter.numel()) for parameter in parameters())
 
     def _gradient_updates(self) -> int | None:
         if self._model is None:
@@ -215,4 +226,3 @@ class StableBaselinesPolicyAdapter(RLPolicy):
 
     def telemetry(self) -> Mapping[str, Any]:
         return _json_value(self._telemetry)
-
