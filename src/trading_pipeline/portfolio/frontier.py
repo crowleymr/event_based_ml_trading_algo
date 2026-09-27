@@ -50,6 +50,7 @@ def model_conditioned_frontier(
     risk_aversions: Sequence[float],
     gross_exposure_cap: float = 1.0,
     max_position: float = 1.0,
+    annualised_volatility_cap: float | None = None,
     covariance_id: str,
     input_sha256: str,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -68,6 +69,10 @@ def model_conditioned_frontier(
         raise ValueError("gross_exposure_cap must be in (0, 1]")
     if not 0 < max_position <= gross_exposure_cap:
         raise ValueError("max_position must be in (0, gross_exposure_cap]")
+    if (annualised_volatility_cap is not None
+            and (not np.isfinite(annualised_volatility_cap)
+                 or annualised_volatility_cap <= 0)):
+        raise ValueError("annualised_volatility_cap must be positive and finite")
     lambdas = [float(value) for value in risk_aversions]
     if not lambdas or any(not np.isfinite(value) or value <= 0 for value in lambdas):
         raise ValueError("risk_aversions must contain positive finite values")
@@ -76,14 +81,24 @@ def model_conditioned_frontier(
 
     point_rows: list[dict] = []
     weight_rows: list[dict] = []
-    initial = np.full(len(names), min(gross_exposure_cap / len(names), max_position))
+    initial = np.zeros(len(names)) if annualised_volatility_cap is not None else np.full(
+        len(names), min(gross_exposure_cap / len(names), max_position))
     for frontier_index, risk_aversion in enumerate(sorted(lambdas, reverse=True)):
+        constraints = [
+            {"type": "ineq", "fun": lambda weights: gross_exposure_cap - weights.sum()},
+        ]
+        if annualised_volatility_cap is not None:
+            variance_cap = float(annualised_volatility_cap) ** 2
+            constraints.append({
+                "type": "ineq",
+                "fun": lambda weights, limit=variance_cap: limit - weights @ cov @ weights,
+            })
         result = minimize(
             lambda weights: -(means @ weights - 0.5 * risk_aversion * (weights @ cov @ weights)),
             initial,
             method="SLSQP",
             bounds=[(0.0, max_position)] * len(names),
-            constraints=[{"type": "ineq", "fun": lambda weights: gross_exposure_cap - weights.sum()}],
+            constraints=constraints,
             options={"maxiter": 500, "ftol": 1e-12, "disp": False},
         )
         status = "complete" if result.success else "solver_failed"
@@ -100,6 +115,7 @@ def model_conditioned_frontier(
             "risk_aversion": risk_aversion,
             "expected_return": expected_return,
             "expected_volatility": expected_volatility,
+            "volatility_cap": annualised_volatility_cap,
             "gross_exposure": float(weights.sum()) if result.success else None,
             "status": status,
             "solver_message": str(result.message),

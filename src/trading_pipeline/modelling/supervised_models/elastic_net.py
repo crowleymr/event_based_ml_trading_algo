@@ -20,6 +20,8 @@ ELASTIC_NET_SPEC = ComponentSpec(
     version=1,
     research_enabled=False,
     capabilities={
+        "study_adapter": True,
+        "tabular_view": True,
         "train_only_preprocessing": True,
         "stopping_data": False,
         "continuation": False,
@@ -32,8 +34,8 @@ ELASTIC_NET_SEARCH_SPACE: Mapping[str, Any] = {
     "schema_version": 1,
     "strategy": "explicit_grid",
     "parameters": {
-        "alpha": {"type": "categorical", "values": [0.0001, 0.001]},
-        "l1_ratio": {"type": "categorical", "values": [0.1, 0.5]},
+        "alpha": {"type": "categorical", "values": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0]},
+        "l1_ratio": {"type": "categorical", "values": [0.0, 0.1, 0.5, 0.9]},
     },
 }
 
@@ -50,3 +52,6 @@ class ElasticNetModel(LegacySklearnAdapter):
 
     def _build(self, *, seed: int):
         return build_elastic_net(dict(self._params), seed)
+
+
+COMPONENT_REGISTRATIONS = ((ELASTIC_NET_SPEC, ElasticNetModel),)

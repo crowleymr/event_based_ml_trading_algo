@@ -35,6 +35,7 @@ class PilotDataset:
     calendar: tuple[date, ...]
     reference_equity: dict[str, dict[date, float]]
     source_hashes: dict[str, str]
+    valuation_policy: str = "complete_daily_valuation_v1"
 
 
 def _load_json(path: Path) -> dict:

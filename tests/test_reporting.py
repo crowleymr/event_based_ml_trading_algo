@@ -7,6 +7,7 @@ import pytest
 from trading_pipeline.config import load_config
 from trading_pipeline.reporting import build_report, generate_report
 from trading_pipeline.reporting.generate import _optional_research_tables
+from trading_pipeline.reporting.generate import OPTIONAL_RESEARCH_COLUMNS
 from trading_pipeline.run import run
 
 
@@ -97,7 +98,11 @@ def test_missing_input_fails_and_generation_is_versioned(tmp_path, report_run):
 
 def test_optional_research_evidence_requires_audited_hash_manifest(tmp_path):
     evidence = tmp_path / "realised_risk_return_curve.parquet"
-    pl.DataFrame({"model_id": ["lstm"]}).write_parquet(evidence)
+    pl.DataFrame({
+        "model_id": ["lstm"], "risk_order": [1], "risk_scenario": ["balanced"],
+        "annualised_volatility": [0.1], "annualised_return": [0.05],
+        "risk_control_monotonic": [True],
+    }).write_parquet(evidence)
     (tmp_path / "audit.json").write_text(
         json.dumps({"passed": True}), encoding="utf-8"
     )
@@ -116,4 +121,17 @@ def test_optional_research_evidence_requires_audited_hash_manifest(tmp_path):
     }
     pl.DataFrame({"model_id": ["ppo"]}).write_parquet(evidence)
     with pytest.raises(ValueError, match="hash mismatch"):
+        _optional_research_tables(tmp_path)
+
+
+@pytest.mark.parametrize("name,required", OPTIONAL_RESEARCH_COLUMNS.items())
+def test_optional_research_tables_fail_fast_on_missing_consumer_columns(tmp_path, name, required):
+    path = tmp_path / name
+    pl.DataFrame({"wrong_column": ["x"]}).write_parquet(path)
+    (tmp_path / "audit.json").write_text(json.dumps({"passed": True}), encoding="utf-8")
+    (tmp_path / "research_evidence_manifest.json").write_text(json.dumps({
+        "schema_version": 1,
+        "files": [{"relative_path": name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}],
+    }), encoding="utf-8")
+    with pytest.raises(ValueError, match="schema invalid"):
         _optional_research_tables(tmp_path)

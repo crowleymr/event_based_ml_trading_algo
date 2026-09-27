@@ -141,6 +141,26 @@ Lower layers do not call the application service. Portfolio code receives tables
 
 The roadmap is detailed in [BACKLOG.md](BACKLOG.md). Planned items are not claims of implemented capability.
 
+## Expanded-study configuration boundary
+
+The fresh-vintage data assets are selected by the study's pinned snapshot, feature,
+exposure and window manifests. Feature column declarations live in the study YAML
+and feature manifest; a change to those assets or columns requires a new hash-pinned
+protocol. `experiment_arms` in that YAML is the model roster. Trusted model
+implementation modules declare their own registration metadata, which the registry
+discovers only below the installed supervised, unsupervised and RL policy packages.
+Component IDs from YAML are looked up in that registry and never imported as paths.
+An approved capability gate must cover exactly the declared arm IDs, components and
+interfaces before the study runner opens score-bearing inputs.
+
+Remaining Python-coded choices are explicit protocol/bridge limits: canonical F0/F1
+column constants are still used in the study runner's feature extraction and parity
+checks; the deep supervised bridge recognises the LSTM/Transformer implementations;
+the RL sleeve producer uses the frozen E1–E4 mapping; and objective, feature-view,
+budget-tier and execution-bridge support are finite allowlists. These are not inferred
+from model test outcomes. Adding a new family or data view needs an audited bridge,
+its declared protocol metadata and new capability evidence before approval.
+
 ## Facts and pending decisions
 
 ### Known facts

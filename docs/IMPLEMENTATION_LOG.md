@@ -489,3 +489,561 @@ before kernel startup with Windows `WinError 5` writing Jupyter's secure connect
 file; the environment also lacks `win32api` (pywin32), and the fallback Windows ACL
 operation was denied. No numeric result was added or recomputed, and no run/report
 artefact was changed. The public URL and licensing decision remain pending human review.
+
+## 2026-09-26 — Expanded canonical vintage and feature snapshot
+
+Added `trading_pipeline.data.expanded_vintage`, an offline derivation from the sealed
+`sp500-20260926-v3` admission and its admitted-universe source manifest. It verifies
+the admission, security master and every consumed Yahoo/SEC raw hash before producing
+new canonical Parquet tables, F0/F1 features, five-session labels, point-in-time filing
+dates, readiness masks, a per-security summary and hash-declared manifests. It does
+not download, overwrite caches, train models or enter the completed Slice 1 run path.
+Tabular, sequence and RL representation contracts refer to the same feature snapshot;
+train-only transforms and any out-of-fold upstream predictions remain evaluator work.
+No upstream prediction feature was asserted without a fitted, fold-scoped lineage.
+
+The first bounded materialisation correctly stopped at canonical OHLC validation:
+the pinned HUBB Yahoo history has an Open below Low on 2021-05-05. Rather than
+substitute a price or leave a held-price gap, the derivation excludes the entire
+HUBB security from canonical bars, facts and features. It retains HUBB's sealed
+admission outcome, source hashes and an explicit `market_bar_rejections.parquet` row.
+The source/data manifest distinguishes admitted and canonical-security counts.
+
+Successful command:
+
+```powershell
+.venv\Scripts\python.exe -m trading_pipeline.data.expanded_vintage --admitted-root data/expanded_2026-09-26/admitted_v3 --output data/expanded_2026-09-26/vintage_v1
+```
+
+Generated evidence is in `data/expanded_2026-09-26/vintage_v1/`. Its
+`data_vintage_manifest.json` has SHA256
+`173073f1b7bb23d9021ba76916797b26418e6364fb0b085569b5b36fc1ef3157`;
+`feature_manifest.json` has SHA256
+`331b14709c9e25394e9b9508bb07ce15e2a2b4f76cf7b58222520e099887c687`.
+The latter pins `features/features.parquet` SHA256
+`9e62981ac19c5de29ffcbfec29409e577151728db2a3d1873acd92d3bc10819e`.
+Manifest-generated counts: 500 candidates, 497 admitted, 496 canonical securities,
+one quality exclusion, 1,416,531 feature rows and 1,414,051 labelled rows. These
+are derivation counts, not model performance or evidence of an unbiased historical
+universe. The current-survivor and retrospective Yahoo adjustment limitations remain.
+
+Focused verification command:
+
+```powershell
+.venv\Scripts\python.exe -m pytest -q --basetemp=.pytest-expanded-vintage-allow tests/test_expanded_vintage.py
+```
+
+Result: three tests passed. The first sandboxed fixture attempt hit Windows
+`WinError 5` on pytest's temporary directory; rerunning the same focused command
+with fixture write permission passed. The interrupted build staging directory was
+removed after its exact workspace path was checked; no sealed admission input,
+legacy cache, prior run or report was modified.
+
+### 26 September 2026 — central expanded study gate (engineering checkpoint)
+
+`trading_pipeline.run --study` now passes verified authority to a central study
+runner. The runner requires all seven declared families before opening the
+feature snapshot. Because deep and RL score-bearing bridges are not yet
+integrated in this runner, an approved seven-family protocol fails closed
+without reading outcomes or creating a study run. A partial family protocol
+also fails before data access. The existing `--config` execution remains on
+the Slice 1 path.
+
+The classical lane code accepts a hash-pinned canonical feature snapshot,
+explicit chronological fit/stopping/scoring windows and an exact frozen
+proposal budget. It records proposed/completed/failed trials and fold/seed fit
+telemetry, writes outer selection locks before outer scores, aggregates complete
+inner evidence for a family lock, and projects descriptive holdout labels only
+after that lock. This lane has not executed a real expanded study and creates
+no performance evidence. Full seven-family integration, unified risk-scenario
+backtesting, independent audit integration and real-run verification remain
+open work.
+
+Verification: `py_compile` passed for the runner and CLI. Targeted authority
+and evaluator tests passed (9 tests) with a separate pytest temporary directory
+after the default Windows sandbox denied temporary-directory enumeration. The
+negative tests confirm incomplete and unsupported family matrices fail before
+feature data is opened or a run directory is created.
+
+### 27 September 2026 — WP5 causal upstream-output feature-store contract
+
+Added `trading_pipeline.features.model_outputs` as a versioned, immutable builder
+for supplied inner out-of-fold predictions. It verifies the canonical feature
+manifest and Parquet hashes, the source prediction hash, unique security/session/
+component keys, complete fit/fold/seed/cutoff lineage, finite outputs, and a
+strictly prior fit/label information cutoff. Outer, final-fit, holdout and legacy
+observed-final roles are rejected as training features. The materialised table
+contains every canonical key for each declared component, with unavailable
+outputs represented by a null and explicit availability mask. Consumers must
+fit any imputation on the training partition only. A parity audit checks exact
+values and causal consumer cutoffs for tabular, sequence and RL views while
+reporting their legitimate coverage differences.
+
+The builder does not fit upstream models, generate missing predictions, or run
+the expanded study. The authoritative runner still needs to produce a fold-
+scoped source prediction artefact and bind this store to `F1_CAUSAL_STACK_V1`.
+No real-data feature store or performance result is claimed. Verification:
+`.venv\Scripts\python.exe -m pytest -q --basetemp=.pytest-model-outputs-allow5-20260927 tests/test_model_outputs.py`
+passed 8 synthetic tests in 0.78 seconds, including forbidden-role, future-fit,
+source/store/manifest tamper and representation mismatch cases. A first sandboxed pytest
+attempt could not enumerate its temporary directory (WinError 5); the focused
+suite passed with permitted fixture access. Legacy run artefacts were untouched.
+
+### 27 September 2026 — deep supervised study adapter
+
+Added a fold adapter for registered LSTM and causal Transformer candidates. It
+requires every architecture and optimisation parameter to be explicit, receives
+declared fit/stopping/scoring partitions from the central evaluator, returns
+predictions in the evaluator's scoring-row order, and exposes training trace,
+device/fallback, scaler and resource telemetry for the common fit ledger. It
+does not authorise a study or open the final holdout itself. The sequence view
+now indexes each security history once per transform rather than scanning the
+whole feature pool for every target. The adapter trims each fold pool to the
+declared securities and dates plus exact per-security lookback history. The
+causal through-T semantics are unchanged.
+
+Verification: `.venv\Scripts\python.exe -m pytest -q --basetemp=tmp_deep_study_agent_tests_escalated tests/test_deep_study_adapter.py tests/test_model_execution_bridge.py tests/test_deep_sequence_models.py`
+passed 14 tests in 5.81 seconds. The initial sandboxed pytest run passed 12
+cases but ended with two Windows temporary-directory permission errors; the
+same focused suite passed with normal temporary-directory access; the final
+focused rerun, including shuffled-pool causal ordering, passed 15 tests in
+6.61 seconds. No real-data
+deep HPO or expanded research result was produced.
+
+### 27 September 2026 — expanded DQN/PPO study bridge
+
+Added `rl/study_integration.py`, an explicit fold episode builder and a
+verified-authority trial bridge for both registered DQN and categorical PPO.
+The builder consumes central-runner-provided causal observations, frozen E0–E5
+sleeves, market prices, calendar and source hashes; it does not read the legacy
+run. The trial bridge validates all three declared risk coefficients, seeds,
+architecture parameters, T+1 chronology, after-cost accounting and shared
+train/score lineage. It applies the same scenario constraints to both policy
+families, trains on a declared net-log-return certainty-equivalent reward, and
+checks that deterministic evaluation leaves model, replay and normaliser state
+unchanged. Started/completed/failed trial records, resource rows and hashed
+cell outputs are persisted separately from source inputs. Direct real-data
+calls to the older pilot runner remain forbidden.
+
+Verification: `.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+--basetemp D:\repos\event_based_ml_trading_algo\tmp_rl_study_escalated2
+tests/test_rl_study_integration.py tests/test_registered_rl_runner.py
+tests/test_rl_policy_contracts.py` passed 23 tests in 7.14 seconds. Synthetic
+checks include both algorithms under all three risk scenarios, forbidden
+evaluation updates, invalid PPO rollout divisibility, missing sleeves and
+overlapping fit/score episodes. No score-bearing expanded RL result exists yet;
+the central runner still needs to generate causal observations/sleeves and
+invoke this bridge across all required folds, seeds and proposals.
+
+### 27 September 2026 — central supervised family dispatch
+
+The authoritative `experiments/study_runner.py` now has one supervised fit/score
+dispatch for Elastic Net, HistGBT, XGBoost, LSTM and causal Transformer. Deep
+folds use the audited sequence adapter; all five families return the same
+IC/RMSE, prediction and fit-telemetry contract for the existing inner, outer and
+descriptive-holdout ledgers. Proposal generation uses the frozen family-specific
+budget, deterministic deep random search, exact parameter validation and
+duplicate rejection. The causal-stack view requires a supplied, hash-pinned
+augmented feature table and provenance manifest bound to the canonical feature
+snapshot; its keys and F1 values must match the canonical table, and target
+values cannot enter the augmented table. The runner does not generate upstream
+predictions or substitute missing stacked features.
+
+The seven-family capability gate still rejects score-bearing execution before
+feature reads because DQN/PPO observations, sleeves and trial handling have not
+yet been connected to the central evaluator. The prepared draft also lacks the
+supplied augmented feature contract and frozen `search.deep_training` epochs /
+patience; current four-point classical grids cannot satisfy its eight-proposal
+budget without explicit validated additional proposals or a newly frozen
+search-space revision. No real study or run artefact was created.
+
+Verification: `py_compile` passed for the runner and synthetic tests;
+`.venv\\Scripts\\python.exe -m pytest -q -p no:cacheprovider
+--basetemp=D:\\repos\\event_based_ml_trading_algo\\tmp_study_runner_supervised_approved2
+tests/test_study_runner_supervised.py tests/test_study_authority.py
+tests/test_deep_study_adapter.py` passed 14 tests in 6.78 seconds. The first
+sandboxed pytest attempt hit Windows temporary-directory access errors; the
+same focused suite passed with normal fixture access. Existing run artefacts
+were not modified.
+### 27 September 2026 — score-blind calibration and capability evidence contract
+
+Added `trading_pipeline.experiments.calibration` to select a complete compute-budget
+tier from resource-only timed bridge smokes. The writer requires all seven arms,
+rejects outcome-, prediction-, loss- and ranking-like fields recursively, estimates
+the complete fold/seed/risk-scenario workload, and fails if even the minimum tier
+cannot meet the declared deadline. A separate capability writer requires hash-pinned
+synthetic and real-data-shaped bridge-smoke evidence for every arm exactly. These
+functions create approval inputs only; they do not approve a protocol, read model
+scores, execute HPO or open the final holdout.
+### 27 September 2026 — causal RL episode and sleeve producer (synthetic contract)
+
+Added `trading_pipeline.experiments.rl_episode_producer.produce_selector_episode`
+for the central study runner. It accepts verified in-memory canonical feature,
+model-output and adjusted-close views with their five required source hashes;
+derives first-session weekly signals, T+1 execution and next-signal ends; checks
+model fit/label cutoffs; freezes momentum E0, model-output E1–E4 and a declared
+validation-source inverse-volatility E5; and creates the existing RL bridge's
+`PilotDataset`. A declared trailing adjusted-close lookback estimates each
+sleeve's annualised volatility through T. The minimum of volatility-target,
+gross-cap and max-position scaling is applied and recorded per signal/action,
+with cash retained. Missing outputs, lookback bars and held-security valuation
+bars fail closed. The producer does not read legacy final runs or score real data.
+
+Verification: `.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+--basetemp tmp_rl_episode_producer_tests tests/test_rl_episode_producer.py`
+passed 3 synthetic tests. The current prepared protocol does not declare a
+volatility estimation lookback or an E5 source; central integration must supply
+these explicitly from an approved pre-score protocol before a real run.
+
+### 27 September 2026 — fold-scoped causal upstream producer
+
+Added `experiments/causal_stack.py` to produce fixed F1-only base predictions
+inside declared chronological expanding inner windows. The close-out declaration
+contains Elastic Net (alpha 0.001, l1 ratio 0.5), HistGBT (15 leaves, L2 10),
+XGBoost (depth 3, lambda 10), seed 41, and a derived equal-weight E4 mean.
+Every source row includes component, fold, seed, model/derivation hash, fit
+cutoff, latest fitted label-end date and `inner_oof` role. The producer requires
+an explicit protected holdout start, fit-session minimum and score-block size;
+the central runner must pass the declared 120 and 10 for real execution. It
+rejects overlapping/noncausal folds and score dates reaching the holdout.
+
+The source table can be bound through the existing immutable OOF store builder.
+The shared augmented tabular view retains null outputs and availability masks
+and returns median imputation metadata computed only from supplied training
+partition keys. Sequence and RL consumers can derive their representations
+from this same keyed view/store. The prepared study still lacks a frozen
+`data.upstream_base_layers` and `validation.upstream_cross_fit` declaration,
+and registered upstream components remain research-disabled. Real-data
+execution therefore remains gated; no legacy or holdout artefacts were read.
+
+Verification: focused synthetic producer and OOF-store suite passed 12 tests
+in 1.10 seconds with normal temporary-directory access after the sandboxed
+pytest fixture directory failed with WinError 5. Synthetic checks cover
+lineage, masks, train-only imputation, protected boundary rejection, future
+label perturbation and the derived ensemble.
+
+### 27 September 2026 — score-blind prepared-draft bridge smoke
+
+Added a standalone seven-arm engineering smoke CLI. It validates the prepared
+draft, pinned feature and inner-window manifests, causal augmented table and
+lineage, RL output paths, and explicit deep/RL protocol fields before projecting
+any parquet rows. Supervised smoke fits on a fixed small inner-fold sample and
+checks feature-only evaluation output shape; deep arms execute one training epoch.
+RL smoke constructs the declared causal selector episode and both policy
+networks, resets the environment and checks a deterministic action. It does not
+step or learn in the environment, because either would calculate realised
+returns and rewards. Only time, device, shape and source hashes enter immutable
+per-arm bridge receipts and calibration records. This is engineering capability
+evidence, not study execution or approval.
+
+The prepared v3 draft currently lacks a resolved augmented-feature contract,
+so the CLI fails before parquet reads and emits no receipts. Verification:
+`python -m py_compile src/trading_pipeline/experiments/real_data_bridge_smoke.py`
+passed; `pytest -q -p no:cacheprovider tests/test_real_data_bridge_smoke.py`
+passed four focused tests. The first test run encountered a Windows pytest
+temporary-directory permission error; rerun without `tmp_path` fixtures passed.
+
+### 27 September 2026 — expanded reporting table schema contracts
+
+Added fail-fast required-column checks for each of the eleven optional expanded
+research Parquet tables at both report generation and dashboard loading. The
+contracts cover fields used by the funnel, security drill-down, trial evidence,
+frontier/risk charts and final test-bench notebook views. Audit and hash-manifest
+checks still run, and optional files remain optional; malformed declared evidence
+now fails before it is passed to consumers.
+
+Verification: the dashboard-only overview test passed (1 passed). The focused
+reporting/dashboard suite could not execute its fixtures because pytest's
+`tmp_path`/`tmp_path_factory` setup and cleanup hit Windows `WinError 5` access
+denials on basetemp directories, including the configured writable workspace.
+No real run or generated research evidence was accessed or changed.
+
+### 27 September 2026 — read-only expanded closeout evidence postprocessor
+
+Added `trading_pipeline.reporting.expanded_closeout` as a separate CLI. It accepts
+one completed, audited `runs/expanded_closeout/<run_id>` and verifies the full
+run hash inventory, protocol authority, pinned canonical feature/price snapshot,
+sealed holdout calendar and complete arm/seed/risk matrix before writing eleven
+optional WP7 Parquet tables under `reports/expanded_closeout/<run_id>`. A separate
+`research_evidence_manifest.json` records run ID, input/output SHA-256 values,
+code version and generation time. The postprocessor uses the runner's holdout
+predictions and hashed RL cells; supervised portfolios use first-session weekly
+signals, next-session close fills, declared caps and trailing sample volatility,
+and the canonical self-financing one-way cost solver. RL and supervised series
+must align on identical weekly marks. SPY is included only if complete canonical
+SPY bars are present in the protocol-pinned feature snapshot; otherwise the
+benchmark is explicitly marked unavailable. Realised profiles retain every
+model, seed and scenario, including dominated outcomes. Classical frontier
+points are generated only for supervised models. The question register contains
+generated protocol facts and availability limitations, not student reflection.
+
+The frontier utility solver applies declared gross and position caps to a
+trailing point-in-time sample covariance; the separate volatility target is
+recorded but is not an active classical-frontier constraint. The realised
+supervised portfolio does enforce that target through ex-ante scaling. No
+expanded completed run currently exists, so no report was generated or outcome
+interpreted. The CLI also refuses partial or calendar-misaligned RL holdout
+cells; this is a source-contract gate, not a claim that WP6 is complete.
+
+Verification: `.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+--basetemp D:\repos\event_based_ml_trading_algo\tmp_expanded_postprocess_escalated
+tests/test_expanded_closeout.py` passed four synthetic tests with normal
+temporary-directory access. These cover tampered audited artifacts, T+1 cost
+and gross-to-net reconciliation, weekly aggregation, equity mismatch rejection,
+and pipeline count reconciliation. `py_compile` passed for the new module.
+
+### 27 September 2026 — trusted component discovery and declared study roster
+
+Moved the built-in supervised, unsupervised and RL registrations into metadata
+declared by each implementation module. `default_registry()` discovers only direct
+modules under the three trusted installed model packages; study YAML component IDs
+are registry lookups, never Python import paths. Duplicate component IDs fail closed.
+The expanded runner no longer compares its roster against a fixed seven-family set.
+It validates unique declared arm/component IDs, registered interfaces, supported
+bridges and the exact arm/component/interface mapping in the hash-pinned approved
+capability gate. The gate writer and finaliser now operate on the YAML-declared
+roster, while retaining the fixed expanded-study identity and score-blind evidence
+requirements. No Slice 1 implementation, immutable run or real research data was
+changed or executed.
+
+Data asset paths and feature-column declarations remain manifest/protocol inputs.
+`docs/ARCHITECTURE.md` records the remaining coded F0/F1, deep-bridge, RL-sleeve,
+objective and budget constraints so they cannot be mistaken for open-ended plugin
+support. Focused discovery, component contract, study runner, calibration and
+manifest-resolution and authority tests passed: 44 tests in 8.19 seconds. Pytest needed an
+unsandboxed run because the Windows sandbox denied temporary fixture access and
+worker pipes; the initial sandboxed run was inconclusive for those fixtures.
+
+### 27 September 2026 — synthetic verification receipt CLI
+
+Added a deterministic-input CLI that accepts a JUnit XML report and the prepared
+study YAML, requires at least one test with zero JUnit errors and failures, and
+writes one immutable `synthetic_verification` JSON receipt per declared arm plus
+an arm-to-receipt JSON mapping. Receipts bind the exact YAML component/interface
+to the absolute JUnit path and SHA-256, suite totals, UTC generation time and
+available Git code version. This records synthetic test evidence only; it does
+not run tests, read real data or change research behavior.
+
+### 27 September 2026 — expanded study routes by trusted capabilities
+
+Removed the remaining Python component-ID rosters from the central study runner,
+deep fold adapter, RL trial bridge and score-blind bridge smoke. Trusted model
+modules now declare `study_adapter` plus one supervised view capability
+(`tabular_view` or `sequence_view`); RL policies declare `study_adapter` and
+`discrete_actions`. The runner rejects absent or ambiguous bridge metadata before
+score-bearing reads, chooses the proposal budget and fit adapter from the
+registered `ComponentSpec`, and constructs candidates through `registry.create`.
+The deep and RL bridges independently verify the same registered capabilities.
+YAML still supplies experiment arms as opaque registry IDs and cannot supply
+Python import paths. No research policy, protocol, real data or run artefact was
+changed.
+
+Verification: focused supervised, deep, RL, smoke, discovery and authority suite
+passed 31 tests in 7.44 seconds.
+The initial sandboxed runs failed during Windows pytest temporary-directory
+fixture setup (`WinError 5`); the suite passed with approved filesystem
+escalation and a repository-local base temp.
+
+### 27 September 2026 — deadline-closeout protocol controls
+
+Added a shared declared tier table for score-blind calibration and study
+finalisation, including a complete two-proposal budget per classical, deep and
+RL family. Calibration now records the explicit cell-count formula, fold/seed/
+scenario factors, timing-scope requirement and excluded work. The manifest-freeze
+CLI now accepts the fold counts and all fixed window sizes; the draft study seed
+list is `[41]`. These changes prepare a separately hashed exploratory revision.
+They do not modify the existing approved protocol, inspect model outcomes, run
+the real study, or access the descriptive holdout. With one seed, seed dispersion
+is unavailable; the two-outer/two-inner fold design is deadline-constrained
+exploratory evidence, not confirmatory. The focused calibration, manifest and
+study-runner suite passed 15 tests in 3.07 seconds. The first sandboxed attempts
+could not create pytest temporary fixtures on Windows (`WinError 5`); the final
+run used approved filesystem access and a repository-local base temp.
+# 27 September 2026 — read-only expanded evidence consumer glue
+
+Added a separate eleven-table expanded report loader that verifies the generated
+manifest's run identity, exact output inventory, SHA-256 hashes, required columns and
+row counts before reading any table. The existing dashboard now accepts
+`--expanded-report reports/expanded_closeout/<run_id>` alongside its legacy Slice 1
+`--report` entry point. Expanded tabs display generated pipeline/security,
+architecture/HPO, risk/frontier, final test-bench and evidence-register tables.
+Presentation filters retain the benchmark, and curves preserve model, seed and
+scenario identity; no model selection or report generation occurs in the UI. The
+final evidence notebook detects expanded manifests through
+`TRADING_REPORT_DIR` and executes against the self-contained report without Slice 1
+tables. Operator commands are documented in the dashboard README, repository README
+and public-notebook preparation page. No run artefacts, source data or research
+protocol was changed.
+
+Verification: `tests/test_dashboard.py` passed 9 tests, including an AppTest of the
+expanded controls, an executed final-notebook code-cell integration check, loader
+checksum rejection and read-only byte comparison. The local Windows sandbox denied
+pytest temporary fixtures on the first attempt; the focused suite passed with normal
+temporary-directory access. Notebook execution emitted only expected non-interactive
+Matplotlib display warnings under pytest.
+
+## 27 September 2026 — zero-argument expanded evidence operator flow
+
+The expanded report generator now discovers the repository and newest fully audited
+completed expanded run when invoked with no arguments. An existing valid report is
+verified and reused; an incomplete or tampered run is excluded. The generated
+manifest records source completion time, source Git commit and vintage, plus a
+protocol-derived summary of budget tier, proposal counts, outer/inner folds, seeds,
+requested device and declared arm/component mappings. It also records the generated
+evaluation calendar hash, execution, cost, annualisation and benchmark contract.
+These labels come from the immutable source protocol and metadata.
+
+The no-argument dashboard discovers complete locally bound eleven-table reports,
+opens the latest by source completion time and displays reports with the same
+evaluation contract in a Model monitoring / run comparisons tab. Different protocol
+hashes are flagged and their budgets, folds, seeds, devices and arm mappings shown.
+Original generated model/seed/risk metric rows are shown with provenance columns;
+no values are pooled or selected.
+Partial, smoke and tampered reports are skipped. Explicit report/run arguments
+remain available for advanced use. Documentation now leads with the two-command
+operator flow. Verification: `tests/test_dashboard.py` and
+`tests/test_expanded_closeout.py` passed 19 synthetic tests, including zero-argument
+AppTest, audited run discovery and damaged-report exclusion. Headless Matplotlib
+emitted three expected display warnings.
+
+### 27 September 2026 — development-label scan reuse in expanded runner
+
+The authoritative study runner now caches labels by date for the exact union of
+declared inner and outer fit, stopping and scoring partitions. It loads each
+partition on demand and reuses materialised rows across candidates and arms.
+The cache rejects dates outside that union and overlap with the sealed holdout.
+Outer score labels are first requested after their arm/outer selection lock is
+written. The descriptive holdout is loaded separately, once, only after a
+nonempty `family_locks.json` with `holdout_selection: forbidden` exists. Final
+training/stopping labels outside nested partitions are also loaded separately
+after that lock. No research policy, protocol, data, model outcomes or run
+artefacts were changed.
+
+The stopped run's fit telemetry excludes repeated Parquet scans and matrix
+construction, so its ~3.6-second fit time cannot estimate total cell time.
+With the two-by-two fold and two-proposal revision, repeated supervised label
+scans fall from one per fit/stopping/scoring request to at most one for each
+newly encountered inner partition and locked outer partition. This is an I/O
+reduction, not a measured full-study runtime guarantee. CPU candidate process
+parallelism was deferred: the existing loop appends trial and fit evidence and
+seals selection locks in order, while candidate failure handling and the
+shared feature pool would require an explicit parent-owned worker/result
+contract to preserve that order. Deep and RL fits also share one CUDA device.
+
+Verification: focused runner, authority, deep and RL integration suites passed
+27 tests in 7.74 seconds. The first sandboxed pytest attempt could not create
+temporary fixtures on Windows (`WinError 5`); tests passed with normal Windows
+temporary-directory access.
+
+### 27 September 2026 — bounded deep sequence device transfers
+
+The LSTM and causal Transformer adapters now transfer at most the declared
+`batch_size` sequence rows to the selected device for optimizer updates, epoch
+train/stopping loss and prediction. Epoch MSE sums squared error over all
+minibatches and divides by the full row count, retaining sample weighting when
+the last minibatch is smaller. Prediction concatenates outputs in input row
+order. The change addresses the production CUDA smoke's full-batch allocation
+failure on the 16 GB RTX 4060 Ti; it does not change model parameters, seeds,
+validation windows, early-stopping comparison or the approved protocol.
+
+Verification: the focused deep-model and study-adapter suite passed 13 tests in
+8.52 seconds. LSTM and Transformer tests compare bounded-batch predictions
+with full-batch CPU predictions, compare uneven-batch MSE with full-batch MSE,
+and instrument every device transfer to require no more than `batch_size` rows.
+Full-vintage CUDA runtime remains to be measured by the score-blind smoke.
+
+### 27 September 2026 — production batch search and operator pause
+
+A 400-security, full-fit-history, resource-only CUDA smoke confirmed bounded VRAM
+(approximately 1.3–1.4 GiB) and sustained GPU execution, but the sampled batch size of
+64 was transfer-bound at roughly 30–50% GPU utilisation. The operator stopped the smoke
+before it wrote evidence because the GPU was needed for foreground use. The smoke did
+not persist predictions, scores, rankings or a partial capability record and did not
+open the descriptive holdout.
+
+Before any outcome-bearing run, the metadata-declared LSTM/Transformer batch-size search
+range was changed from `[64, 128]` to `[512, 1024]`. This retains batch size as an HPO
+dimension while matching the expanded-universe production scale and 16 GiB device. No
+model outcome informed the change. The deep-model and study-adapter suite passed 13
+tests. A fresh all-arm timing smoke is still required before approval; the interrupted
+attempt is not valid calibration evidence.
+
+The zero-argument dashboard monitoring view was also given generated human-readable run
+and implementation-scope labels derived from immutable protocol metadata. The focused
+dashboard/report suite passed 19 tests. Documentation now leads with
+`python -m trading_pipeline.dashboard`; explicit paths remain forensic overrides.
+
+# 27 September 2026 — unattended study operational monitoring
+
+Added `trading_pipeline.operations.study_supervisor`, a read-only wrapper around
+the authoritative `trading_pipeline.run --study` command. It creates a distinct
+operator log directory with timestamped stdout/stderr, JSONL status and diagnostic
+events, elapsed-time heartbeats, process-tree RSS/CPU, host RAM/CPU, and physical
+NVIDIA GPU/VRAM samples. Process CPU utilization is calculated from cumulative
+CPU-time and wall-time deltas, with the first sample marked unavailable. Host
+load averages are recorded when supported. Every child output line becomes a
+structured info, warning or error event. Missing NVIDIA tooling is recorded as unavailable.
+Failure and interruption logs remain on disk. This adds no score-bearing path and
+does not read run outcomes. Focused verification: `tests/test_study_supervisor.py`
+passed 3 tests in 0.12 seconds, including a nonzero CPU-delta check.
+
+### 27 September 2026 — final deadline capability gate and approval
+
+Fixed two score-blind production-smoke defects before approval. RL smoke dates now
+begin only when causal sleeve outputs are available, matching the authoritative runner.
+Sparse expanded rows are materialised with full-schema inference before selecting RL
+features, preventing Polars from freezing a column as Null based on its first 100 rows.
+The shared materialiser is used by both the smoke and authoritative runner and has a
+regression test.
+
+The final 400-security/full-history smoke passed all seven arms. Per-cell wall times were
+8.55s Elastic Net, 19.87s HistGBT, 11.02s CUDA XGBoost, 279.00s CUDA LSTM, 285.06s CUDA
+Transformer, 32.11s CPU DQN and 32.48s CPU PPO. The fresh suite passed 215 tests with zero
+failures/errors and generated seven new synthetic receipts. Score-blind calibration under
+a six-hour search ceiling selected `deadline_complete` at 6,378.42 estimated seconds;
+outcomes and rankings remained unopened. Capability gate
+`capability_gate_deadline_v2.json` passed every declared arm.
+
+`configs/studies/expanded_closeout_approved_v2.yaml` is approved and authority-verified
+with protocol SHA-256
+`71e2126ac30cd500773a1ff590c59a5987ac44fc5652a88b64039828541b86f0`.
+It retains all seven arms, two proposals per family, two outer folds, two inner folds,
+one seed and all three RL risk scenarios. At the time of this gate record no
+authoritative score-bearing run had been launched; the later failed attempt is recorded
+below.
+
+### 27 September 2026 — concise supervisor console status
+
+The operational supervisor now echoes only study lifecycle and phase transitions,
+warnings, errors and terminal status to its launching terminal. Complete child output
+and resource telemetry remain in the versioned operational log files. This changes
+operator presentation only and does not read outcomes or alter the authoritative child
+process. Focused supervisor verification passed 4 tests.
+
+### 27 September 2026 — failed-run diagnosis, immutable resume and RL price correction
+
+Approved-v2 run `20260927T075513Z-3a5052c9` failed closed after supervised outer
+evaluation and before a complete RL candidate or holdout access. Both aggressive DQN
+candidates encountered the same absent FISV interior daily bar. The source run,
+operational logs and failure marker remain unchanged.
+
+The authoritative runner now checkpoints each complete supervised/RL inner, outer and
+holdout cell, including prediction/episode artefacts, content hashes, exact protocol and
+input authority, and a byte-level execution-code hash. `--resume-from` creates a new
+derived run, validates source lineage before creating it, copies only verified complete
+cells, and reruns incomplete work. Protocol/input/code drift, checkpoint tampering,
+completed sources and live unmarked processes fail closed. The supervisor forwards the
+same option and logs the parent path. The pre-checkpoint approved-v2 failure is
+deliberately ineligible. Resume/runner/authority verification passed 32 focused tests;
+the supervisor suite passed 5 tests.
+
+The weekly RL bridge now uses exact observed execution and endpoint prices rather than
+demanding unused intervening daily marks. It never fills a price and still fails on a
+missing required endpoint. A point-in-time trailing 20-session observed-price screen
+excludes a security after a gap becomes known until the window recovers, recording
+per-signal counts, missing dates and reasons. A future-panel completeness screen was
+rejected as lookahead. Twenty-nine focused RL/authority tests passed. The approval
+record and decision log document that no complete RL candidate or holdout result
+informed the correction. Prepared-v8/protocol-v9 were generated immutably over the
+unchanged canonical vintage; fresh score-blind capability evidence and approved-v3
+remain required before relaunch.

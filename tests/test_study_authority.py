@@ -10,6 +10,7 @@ import yaml
 from trading_pipeline.experiments.authority import verify_study_authority
 from trading_pipeline.experiments import FitContext
 from trading_pipeline.experiments.schema import load_study, protocol_content_sha256
+from trading_pipeline.experiments.study_runner import run_study
 from trading_pipeline.rl.runner import run_registered_policy_trial
 from trading_pipeline.run import main
 
@@ -91,6 +92,29 @@ def test_holdout_overlap_fails_before_research_execution(tmp_path):
         verify_study_authority(load_study(path), repository_root=tmp_path)
 
 
+def test_revised_rl_price_policy_requires_both_hash_bound_declarations(tmp_path):
+    path = _approved(tmp_path)
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    config["experiment_arms"].append({"id": "DQN", "interface": "RLPolicy",
+                                      "component_id": "rl_dqn_sb3_v1"})
+    config["data"]["rl_inputs"] = {
+        "eligibility_policy": "complete_causal_upstream_dates_plus_observed_price_history_v2"}
+    config["authority"]["protocol_sha256"] = protocol_content_sha256(config)
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    with pytest.raises(ValueError, match="price_eligibility_policy"):
+        load_study(path, allow_engineering_draft=False)
+    config["data"]["rl_inputs"]["price_eligibility_policy"] = (
+        "observed_history_and_endpoint_valuation_v1")
+    config["authority"]["protocol_sha256"] = protocol_content_sha256(config)
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    load_study(path, allow_engineering_draft=False)
+    config["data"]["rl_inputs"].pop("eligibility_policy")
+    config["authority"]["protocol_sha256"] = protocol_content_sha256(config)
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    with pytest.raises(ValueError, match="paired eligibility_policy"):
+        load_study(path, allow_engineering_draft=False)
+
+
 def test_draft_study_cli_fails_before_creating_run(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.argv", ["trading_pipeline.run", "--study",
                                   "configs/studies/expanded_closeout_draft.yaml"])
@@ -116,3 +140,43 @@ def test_valid_authority_cannot_directly_execute_real_rl(tmp_path):
             data_role=authority.data_role, study=study, authority=authority,
             repository_root=tmp_path,
         )
+
+
+def test_central_study_requires_capability_gate_before_feature_read(tmp_path, monkeypatch):
+    path = _approved(tmp_path)
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    config["experiment_arms"][0].update(feature_set_id="F1", objective_id="supervised_ic_v1")
+    config["authority"]["protocol_sha256"] = protocol_content_sha256(config)
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    study = load_study(path, allow_engineering_draft=False)
+    authority = verify_study_authority(study, repository_root=tmp_path)
+    monkeypatch.setattr("trading_pipeline.experiments.study_runner.pl.read_parquet",
+                        lambda *_args, **_kwargs: pytest.fail("Feature data was opened"))
+    with pytest.raises(ValueError, match="Protocol input requires"):
+        run_study(study, authority, repository_root=tmp_path)
+    assert not (tmp_path / "runs").exists()
+
+
+def test_central_study_rejects_unsupported_family_before_feature_read(tmp_path, monkeypatch):
+    path = _approved(tmp_path)
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    components = ["supervised.elastic_net.v1", "supervised.hist_gbt.v1",
+                  "supervised.xgboost.v1", "supervised.lstm.v1",
+                  "supervised.causal_transformer.v1", "rl_dqn_sb3_v1",
+                  "user.supplied.import_path"]
+    config["experiment_arms"] = [
+        {"id": f"arm_{index}", "interface": "RLPolicy" if component.startswith("rl_")
+         else "SupervisedModel", "component_id": component,
+         "feature_set_id": "F1", "objective_id":
+         "rl_certainty_equivalent_v1" if component.startswith("rl_") else "supervised_ic_v1"}
+        for index, component in enumerate(components)
+    ]
+    config["authority"]["protocol_sha256"] = protocol_content_sha256(config)
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    study = load_study(path, allow_engineering_draft=False)
+    authority = verify_study_authority(study, repository_root=tmp_path)
+    monkeypatch.setattr("trading_pipeline.experiments.study_runner.pl.read_parquet",
+                        lambda *_args, **_kwargs: pytest.fail("Feature data was opened"))
+    with pytest.raises(ValueError, match="Unknown component id"):
+        run_study(study, authority, repository_root=tmp_path)
+    assert not (tmp_path / "runs").exists()

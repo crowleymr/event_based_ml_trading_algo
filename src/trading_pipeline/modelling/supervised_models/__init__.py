@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from trading_pipeline.experiments import ComponentRegistry
+from trading_pipeline.experiments.discovery import register_package
 
 from .elastic_net import ELASTIC_NET_SPEC, ElasticNetModel
 from .hist_gbt import HIST_GBT_SPEC, HistGradientBoostingModel
@@ -12,19 +13,11 @@ from .deep_sequence import (
 )
 
 
-SUPERVISED_REGISTRATIONS = (
-    (ELASTIC_NET_SPEC, ElasticNetModel),
-    (HIST_GBT_SPEC, HistGradientBoostingModel),
-    (XGBOOST_SPEC, XGBoostModel),
-    (LSTM_SPEC, LSTMModel),
-    (TRANSFORMER_SPEC, CausalTransformerModel),
-)
-
-
 def register_supervised_models(registry: ComponentRegistry) -> None:
     """Add this lane's allowlisted factories to a caller-owned registry."""
-    for spec, factory in SUPERVISED_REGISTRATIONS:
-        registry.register(spec, factory)
+    import sys
+
+    register_package(registry, sys.modules[__name__])
 
 
 __all__ = [
@@ -38,6 +31,5 @@ __all__ = [
     "XGBoostModel",
     "LSTMModel",
     "CausalTransformerModel",
-    "SUPERVISED_REGISTRATIONS",
     "register_supervised_models",
 ]

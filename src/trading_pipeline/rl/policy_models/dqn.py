@@ -22,6 +22,7 @@ DQN_SPEC = ComponentSpec(
     version=1,
     research_enabled=False,
     capabilities={
+        "study_adapter": True,
         "discrete_actions": True,
         "continuation": False,
         "staged_metrics": True,
@@ -131,3 +132,5 @@ class DQNPolicy(StableBaselinesPolicyAdapter):
         values["policy_kwargs"] = {"net_arch": widths, "activation_fn": activation_fn}
         return values
 
+
+COMPONENT_REGISTRATIONS = ((DQN_SPEC, DQNPolicy),)

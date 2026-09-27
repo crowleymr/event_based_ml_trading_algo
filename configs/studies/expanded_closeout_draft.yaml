@@ -5,7 +5,7 @@ status: draft
 
 authority:
   parent_protocol: slice1_locked_evidence_preserved
-  approval_record: docs/planning/FINAL_5_DAY_EXPANDED_RESEARCH_CLOSEOUT_PLAN.md
+  approval_record: docs/planning/EXPANDED_STUDY_APPROVAL_V3.md
   protocol_sha256: null
 
 data:
@@ -17,6 +17,40 @@ data:
   universe_cap: 500
   feature_view: F1_CAUSAL_STACK_V1
   upstream_predictions: causal_out_of_fold_only
+  benchmark_contract:
+    benchmark_id: pending_pinned_benchmark
+    manifest_path: pending_pinned_benchmark
+    manifest_sha256: pending_pinned_benchmark
+    bars_path: pending_pinned_benchmark
+    bars_sha256: pending_pinned_benchmark
+  upstream_layer:
+    layer_id: F1_BASE_CROSSFIT_V1
+    feature_set_id: F1
+    prediction_role: inner_oof
+    seed: 41
+    cross_fit:
+      scheme: expanding_chronological_blocks
+      min_fit_sessions: 120
+      score_block_sessions: 60
+      label_purge: information_interval_overlap
+    missing_output_policy: null_plus_mask_train_partition_only_median_imputation
+    outputs:
+      - {id: E1, component_id: supervised.elastic_net.v1, parameters: {alpha: 0.001, l1_ratio: 0.5}}
+      - {id: E2, component_id: supervised.hist_gbt.v1, parameters: {max_leaf_nodes: 15, l2_regularization: 10.0}}
+      - {id: E3, component_id: supervised.xgboost.v1, parameters: {max_depth: 3, reg_lambda: 10.0}}
+      - {id: E4, derived_from: [E1, E2, E3], aggregation: equal_weight_mean}
+  rl_inputs:
+    eligibility_policy: complete_causal_upstream_dates_plus_observed_price_history_v2
+    price_eligibility_policy: observed_history_and_endpoint_valuation_v1
+    model_sleeve_components:
+      E1: supervised.elastic_net.v1
+      E2: supervised.hist_gbt.v1
+      E3: supervised.xgboost.v1
+      E4: derived.equal_weight_mean.v1
+    model_outputs_path: pending_generated_causal_stack
+    model_outputs_sha256: pending_generated_causal_stack
+    bars_path: pending_canonical_feature_snapshot
+    bars_sha256: pending_canonical_feature_snapshot
 
 validation:
   scheme: nested_purged_expanding_walk_forward
@@ -32,13 +66,13 @@ validation:
     claim_status: exploratory_closeout_not_confirmatory
 
 experiment_arms:
-  - {id: EN_F1_STACK, interface: SupervisedModel, component_id: supervised.elastic_net.v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: supervised_ic_v1}
-  - {id: HGBT_F1_STACK, interface: SupervisedModel, component_id: supervised.hist_gbt.v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: supervised_ic_v1}
-  - {id: XGB_F1_STACK, interface: SupervisedModel, component_id: supervised.xgboost.v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: supervised_ic_v1}
-  - {id: LSTM_F1_STACK, interface: SupervisedModel, component_id: supervised.lstm.v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: supervised_ic_v1}
-  - {id: TRANSFORMER_F1_STACK, interface: SupervisedModel, component_id: supervised.causal_transformer.v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: supervised_ic_v1}
-  - {id: DQN_SELECTOR, interface: RLPolicy, component_id: rl_dqn_sb3_v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: rl_certainty_equivalent_v1}
-  - {id: PPO_SELECTOR, interface: RLPolicy, component_id: rl_ppo_categorical_sb3_v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: rl_certainty_equivalent_v1}
+  - {id: EN_F1_STACK, interface: SupervisedModel, component_id: supervised.elastic_net.v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: supervised_ic_v1, execution_device: cpu}
+  - {id: HGBT_F1_STACK, interface: SupervisedModel, component_id: supervised.hist_gbt.v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: supervised_ic_v1, execution_device: cpu}
+  - {id: XGB_F1_STACK, interface: SupervisedModel, component_id: supervised.xgboost.v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: supervised_ic_v1, execution_device: cuda}
+  - {id: LSTM_F1_STACK, interface: SupervisedModel, component_id: supervised.lstm.v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: supervised_ic_v1, execution_device: cuda}
+  - {id: TRANSFORMER_F1_STACK, interface: SupervisedModel, component_id: supervised.causal_transformer.v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: supervised_ic_v1, execution_device: cuda}
+  - {id: DQN_SELECTOR, interface: RLPolicy, component_id: rl_dqn_sb3_v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: rl_certainty_equivalent_v1, execution_device: cpu}
+  - {id: PPO_SELECTOR, interface: RLPolicy, component_id: rl_ppo_categorical_sb3_v1, feature_set_id: F1_CAUSAL_STACK_V1, objective_id: rl_certainty_equivalent_v1, execution_device: cpu}
 
 objectives:
   supervised_ic_v1:
@@ -68,10 +102,12 @@ search:
   method: deterministic_random_with_multifidelity_for_deep_models
   budgets: {classical_per_family: 8, deep_supervised_per_family: 8, rl_per_family_per_risk_scenario: 6}
   architecture_is_hyperparameter: true
+  deep_training: {epochs: 8, patience: 2}
+  rl_training: {total_timesteps: 5000}
   real_data_execution: forbidden_until_manifests_and_component_enablement
 
 reproducibility:
-  seeds: [41, 42, 43]
+  seeds: [41]
   requested_device: auto
   cpu_fallback_required: true
   threads_per_fit: 1
@@ -79,10 +115,24 @@ reproducibility:
 portfolio:
   execution: action_at_T_filled_at_T_plus_1_close
   cost_bps_one_way: 10
+  top_k: 10
+  volatility_lookback_sessions: 20
   long_only: true
   leverage: false
   covariance_estimator: trailing_sample_covariance_v1
   frontier_grid: fixed_risk_aversion
+  rl_sleeves:
+    E0: momentum_return_20d_equal_weight
+    E1: upstream_layer_E1_equal_weight
+    E2: upstream_layer_E2_equal_weight
+    E3: upstream_layer_E3_equal_weight
+    E4: upstream_layer_E4_equal_weight
+    E5: predeclared_E4_inverse_volatility
+  e5_source: E4
+  e5_source_rule:
+    eligible: [E4]
+    selection_partition: none_score_blind_predeclared
+    primary: not_applicable_fixed_baseline
   risk_scenarios:
     conservative: {gross_exposure_cap: 0.60, annualised_volatility_target: 0.08, max_position: 0.05, cash_permitted: true}
     balanced: {gross_exposure_cap: 0.80, annualised_volatility_target: 0.12, max_position: 0.10, cash_permitted: true}

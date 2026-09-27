@@ -215,3 +215,6 @@ class GaussianMixtureRegimeModel(UnsupervisedModel):
                 "Downstream trading value requires a separately authorised nested study.",
             ],
         }
+
+
+COMPONENT_REGISTRATIONS = ((GMM_REGIME_SPEC, GaussianMixtureRegimeModel),)

@@ -1,0 +1,182 @@
+schema_version: 3
+kind: optimisation_study
+study_id: expanded_closeout_exploratory_v1
+status: draft
+authority:
+  parent_protocol: slice1_locked_evidence_preserved
+  approval_record: docs/planning/FINAL_5_DAY_EXPANDED_RESEARCH_CLOSEOUT_PLAN.md
+  protocol_sha256: b18f314f9d8f3e2e1e41b405cb71b4266ca9ba88157be836c9b73e2ff7ec5547
+  input_sha256:
+    docs/planning/FINAL_5_DAY_EXPANDED_RESEARCH_CLOSEOUT_PLAN.md: b326643f5c2a8943b7202739ea46f33c7451862c7ee8c5b0a04d7bbf5d46a325
+    data/expanded_2026-09-26/protocol_v1/snapshot_manifest.json: fb1cbef87543e87fc6a9d73ff7957ab670e502d665482ecb4a213c801afb1891
+    data/expanded_2026-09-26/protocol_v1/exposure_ledger.json: 72308df519d147b0908000f1b7c7f154a2a758d09e7a191d2ea31798b50825ca
+    data/expanded_2026-09-26/protocol_v1/outer_windows.json: f16d8bc041c5d0d750c3ef7264d8de7c2d1a0b1ba745587c2cb57cab2c760d32
+    data/expanded_2026-09-26/protocol_v1/inner_windows.json: 4fabffbaf18d96a6c48a81fc7797bb447f49205f572d04eaaacb26fbf4c66d7f
+    data/expanded_2026-09-26/protocol_v1/final_holdout.json: 1935400dc680877c254cbea79328c9e102e90b10a219f4beeab8f8540b882bfb
+data:
+  vintage_id: expanded_20260926_v1
+  snapshot_manifest: data/expanded_2026-09-26/protocol_v1/snapshot_manifest.json
+  exposure_ledger: data/expanded_2026-09-26/protocol_v1/exposure_ledger.json
+  forbidden_selection_role: legacy_observed_final
+  group_by: session_date
+  universe_cap: 500
+  feature_view: F1_CAUSAL_STACK_V1
+  upstream_predictions: causal_out_of_fold_only
+  feature_columns:
+    F0:
+    - return_5d
+    - return_10d
+    - return_20d
+    - vol_5d
+    - vol_20d
+    - avg_dollar_volume_20d
+    - volume_ratio_20d
+    - ma_distance_20d
+    - price_to_52w_high
+    F1:
+    - return_5d
+    - return_10d
+    - return_20d
+    - vol_5d
+    - vol_20d
+    - avg_dollar_volume_20d
+    - volume_ratio_20d
+    - ma_distance_20d
+    - price_to_52w_high
+    - latest_eps
+    - latest_net_income
+validation:
+  scheme: nested_purged_expanding_walk_forward
+  outer_windows_manifest: data/expanded_2026-09-26/protocol_v1/outer_windows.json
+  inner_windows_manifest: data/expanded_2026-09-26/protocol_v1/inner_windows.json
+  purge: information_interval_overlap
+  embargo_sessions: 5
+  stopping_window: distinct_chronological_tail
+  final_holdout:
+    manifest: data/expanded_2026-09-26/protocol_v1/final_holdout.json
+    sealed: true
+    requires_selection_lock: true
+    claim_status: exploratory_closeout_not_confirmatory
+  window_policy:
+    holdout_sessions: 60
+    outer_folds: 5
+    outer_score_sessions: 20
+    inner_folds: 3
+    inner_score_sessions: 10
+    min_fit_sessions: 120
+    stopping_sessions: 10
+experiment_arms:
+- id: EN_F1_STACK
+  interface: SupervisedModel
+  component_id: supervised.elastic_net.v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: supervised_ic_v1
+- id: HGBT_F1_STACK
+  interface: SupervisedModel
+  component_id: supervised.hist_gbt.v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: supervised_ic_v1
+- id: XGB_F1_STACK
+  interface: SupervisedModel
+  component_id: supervised.xgboost.v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: supervised_ic_v1
+- id: LSTM_F1_STACK
+  interface: SupervisedModel
+  component_id: supervised.lstm.v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: supervised_ic_v1
+- id: TRANSFORMER_F1_STACK
+  interface: SupervisedModel
+  component_id: supervised.causal_transformer.v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: supervised_ic_v1
+- id: DQN_SELECTOR
+  interface: RLPolicy
+  component_id: rl_dqn_sb3_v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: rl_certainty_equivalent_v1
+- id: PPO_SELECTOR
+  interface: RLPolicy
+  component_id: rl_ppo_categorical_sb3_v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: rl_certainty_equivalent_v1
+objectives:
+  supervised_ic_v1:
+    status: approved_for_exploratory_protocol
+    primary: mean_daily_cross_sectional_spearman_ic
+    direction: maximize
+    tie_breakers:
+    - rmse_minimize
+    - complexity_minimize
+    - latency_minimize
+  rl_certainty_equivalent_v1:
+    status: approved_for_exploratory_protocol
+    primary: weekly_net_certainty_equivalent_return
+    direction: maximize
+    risk_scenarios:
+      conservative:
+        risk_aversion: 8.0
+      balanced:
+        risk_aversion: 4.0
+      aggressive:
+        risk_aversion: 2.0
+selection:
+  rule_id: practical_equivalence_then_parsimony_v1
+  practical_equivalence_tolerance: 0.001
+  final_test_selection: forbidden
+  require_complete_folds: true
+  require_all_registered_seeds: true
+  retain_failed_and_pruned_trials: true
+search:
+  policy_id: minimum_defensible_deadline_tier_v1
+  method: deterministic_random_with_multifidelity_for_deep_models
+  budgets:
+    classical_per_family: 8
+    deep_supervised_per_family: 8
+    rl_per_family_per_risk_scenario: 6
+  architecture_is_hyperparameter: true
+  real_data_execution: forbidden_until_manifests_and_component_enablement
+reproducibility:
+  seeds:
+  - 41
+  - 42
+  - 43
+  requested_device: auto
+  cpu_fallback_required: true
+  threads_per_fit: 1
+portfolio:
+  execution: action_at_T_filled_at_T_plus_1_close
+  cost_bps_one_way: 10
+  long_only: true
+  leverage: false
+  covariance_estimator: trailing_sample_covariance_v1
+  frontier_grid: fixed_risk_aversion
+  risk_scenarios:
+    conservative:
+      gross_exposure_cap: 0.6
+      annualised_volatility_target: 0.08
+      max_position: 0.05
+      cash_permitted: true
+    balanced:
+      gross_exposure_cap: 0.8
+      annualised_volatility_target: 0.12
+      max_position: 0.1
+      cash_permitted: true
+    aggressive:
+      gross_exposure_cap: 1.0
+      annualised_volatility_target: 0.16
+      max_position: 0.2
+      cash_permitted: true
+inference:
+  claim_status: exploratory_closeout_not_confirmatory
+  benchmark: SPY
+  report_all_risk_scenarios: true
+  report_dominated_outcomes: true
+  classical_frontier_eligible_interfaces:
+  - SupervisedModel
+  realised_risk_return_curve_all_finalists: true
+outputs:
+  runs_root: runs/expanded_closeout
+  reports_root: reports/expanded_closeout
+  immutable_completion_manifest: true

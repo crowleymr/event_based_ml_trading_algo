@@ -22,6 +22,7 @@ PPO_SPEC = ComponentSpec(
     version=1,
     research_enabled=False,
     capabilities={
+        "study_adapter": True,
         "discrete_actions": True,
         "categorical_policy": True,
         "continuation": False,
@@ -150,3 +151,5 @@ class CategoricalPPOPolicy(StableBaselinesPolicyAdapter):
         values["policy_kwargs"] = {"net_arch": net_arch, "activation_fn": activation_fn}
         return values
 
+
+COMPONENT_REGISTRATIONS = ((PPO_SPEC, CategoricalPPOPolicy),)

@@ -56,6 +56,31 @@ OPTIONAL_RESEARCH_INPUTS = (
     "question_and_assumption_register.parquet",
 )
 
+# Stable consumer contracts for optional expanded-study evidence. These are
+# deliberately limited to fields used by the dashboard/notebook views.
+OPTIONAL_RESEARCH_COLUMNS = {
+    "pipeline_stage_summary.parquet": {"stage"},
+    "pipeline_security_summary.parquet": {"security_id"},
+    "architecture_trial_summary.parquet": {"model_id", "trial_id", "status"},
+    "hpo_trial_summary.parquet": {"model_id", "trial_id", "status"},
+    "risk_scenario_summary.parquet": {"model_id", "risk_scenario"},
+    "model_conditioned_frontier_points.parquet": {
+        "rebalance_date", "model_id", "status", "expected_volatility", "expected_return",
+    },
+    "model_conditioned_frontier_weights.parquet": {
+        "rebalance_date", "model_id", "security_id", "weight",
+    },
+    "realised_risk_return_curve.parquet": {
+        "model_id", "risk_order", "risk_scenario", "annualised_volatility",
+        "annualised_return", "risk_control_monotonic",
+    },
+    "final_testbench_metrics.parquet": {"experiment_id", "split"},
+    "final_testbench_equity_curve.parquet": {
+        "experiment_id", "display_label", "split", "session_date", "equity", "drawdown",
+    },
+    "question_and_assumption_register.parquet": {"item_id", "status"},
+}
+
 METRICS = {
     "total_return": ("Compounded end equity minus one", "decimal fraction"),
     "annualised_return": ("Compounded return annualised over 252 sessions", "decimal fraction per year"),
@@ -561,7 +586,17 @@ def _optional_research_tables(root: Path) -> tuple[dict[str, pl.DataFrame], list
          "role": "completed_research_evidence"}
         for name in present
     ]
-    return {Path(name).stem: pl.read_parquet(root / name) for name in present}, dependencies
+    tables = {}
+    for name in present:
+        frame = pl.read_parquet(root / name)
+        missing_columns = OPTIONAL_RESEARCH_COLUMNS[name] - set(frame.columns)
+        if missing_columns:
+            raise ValueError(
+                f"Optional research table schema invalid for {name}; missing columns: "
+                f"{', '.join(sorted(missing_columns))}"
+            )
+        tables[Path(name).stem] = frame
+    return tables, dependencies
 
 
 def _rl_tables(rl_root: Path | None) -> tuple[dict[str, pl.DataFrame], list[dict]]:

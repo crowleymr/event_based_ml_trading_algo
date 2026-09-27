@@ -171,19 +171,32 @@ and verify actual tensor placement before a run:
 explicit reason. Each new RL run emits schema-versioned training traces/summaries and a
 short CPU/GPU timing diagnostic. These diagnostics never select a device, model or seed.
 
-Start the read-only dashboard from an existing generated report and optional completed
-RL run:
+For a completed audited expanded study, generate the report and start the read-only
+dashboard without supplying a repository path or run ID:
 
 ~~~powershell
-.venv/Scripts/python -m trading_pipeline.dashboard `
-  --report reports/20260920T010939Z-1225374b/v1 `
-  --rl-run runs/rl/20260920T002714Z-9c9692fc
+.venv/Scripts/python -m trading_pipeline.reporting.expanded_closeout
+.venv/Scripts/python -m trading_pipeline.dashboard
 ~~~
+
+The dashboard selects the latest completed verified report for its main views. Its
+Model monitoring / run comparisons tab compares compatible completed reports and
+shows when each completed, the study/budget label, implemented arm/component/device
+mappings, protocol hash and code commit. Explicit `--expanded-report`, legacy
+`--report`, and optional `--rl-run` arguments are retained for forensic inspection.
 
 Training Diagnostics uses the common telemetry contract for Histogram GBT, XGBoost and
 DQN. Elastic Net shows its solver/final diagnostics and an explicit no-conventional-curve
 notice. The RL run is exploratory and the completed Slice 1 final test is descriptive only.
 The dashboard never trains, tunes, regenerates reports or modifies source artefacts.
+
+The generator prints the selected report path if you want to pin the notebook with
+`TRADING_REPORT_DIR`; otherwise the notebook also discovers the newest report. Open
+`notebooks/final_evidence.ipynb` and run all cells. The expanded loader checks the
+manifest, all eleven Parquet hashes, schemas and row counts. The dashboard's Model
+monitoring tab shows original high-level metric rows across completed reports with
+the same evaluation contract and flags differing research protocols. The complete
+holdout matrix is descriptive only.
 
 Raw caches are not overwritten. Use a new data_dir for a new source-data vintage.
 Every full invocation creates a new run ID and preserves previous experiment artefacts.

@@ -95,6 +95,9 @@ class NoRegimeModel(UnsupervisedModel):
             "fit_context": context_telemetry(self._fit_context),
             "causal_limitations": [
                 "The constant state is a control and has no predictive density.",
-                "State identifiers have no economic or semantic meaning.",
+            "State identifiers have no economic or semantic meaning.",
             ],
         }
+
+
+COMPONENT_REGISTRATIONS = ((NO_REGIME_SPEC, NoRegimeModel),)

@@ -23,6 +23,113 @@ This plan supersedes the scope-freeze priority in `docs/close_out/SUBMISSION_CLO
 
 ## 2. Current-state review
 
+### Failed-run recovery checkpoint — 27 September 2026
+
+Approved-v2 run `20260927T075513Z-3a5052c9` failed closed after completing the
+supervised outer-fold work and before any complete RL candidate or holdout access.
+The immediate cause was an RL bridge requirement for every intervening daily price,
+although the declared reward is an exact weekly execution-to-endpoint return. The run
+and its failure evidence remain immutable and are not eligible for resume because they
+predate code-state binding and per-cell prediction checkpoints.
+
+The acceptable unattended execution window is now **6–8 hours**. The initial
+production-scale deep smoke exposed a score-blind engineering bottleneck: the sampled
+64-row batches left the RTX 4060 Ti transfer-bound at roughly 30–50% utilisation. The
+declared deep search space now tests 512- and 1,024-row batches; 13 focused deep tests
+pass and bounded transfers remain well below 16 GiB VRAM. Before an evening launch,
+run one fresh representative all-arm smoke using this final code, calibrate against an
+eight-hour ceiling with explicit final-fit/holdout reserve, then approve and start the
+authoritative run. Do not reuse the interrupted timing attempt.
+
+The intended operator surface after completion remains:
+
+```powershell
+.venv\Scripts\python.exe -m trading_pipeline.reporting.expanded_closeout
+.venv\Scripts\python.exe -m trading_pipeline.dashboard
+```
+
+The dashboard opens the latest verified run; historical compatible runs appear only in
+the monitoring tab with generated implementation and provenance labels.
+
+### Live critical-path handoff — 27 September 2026
+
+This checklist is the current operator/alternative-harness handoff. Update it whenever
+an acceptance gate changes; generated artefacts and tests remain the evidence authority.
+
+- [x] Freeze 500 dated candidates while preserving the original 100.
+- [x] Seal admission v3: 497 admitted, three explicitly excluded for fewer than 260 sessions.
+- [x] Derive the immutable admitted universe and security master.
+- [x] Materialise canonical expanded vintage v1: 496 canonical securities after one explicit
+  raw-quality exclusion (HUBB), 1,416,531 feature rows and 1,414,051 labelled rows.
+- [x] Generate pinned snapshot, exposure, nested inner/outer-window and sealed-holdout manifests.
+- [x] Generate a self-hashed seven-arm prepared study that remains execution-forbidden.
+- [x] Implement and test the causal OOF model-output store/parity API, including lineage, cutoff, coverage-mask and representation checks (WP5 contract only).
+- [x] Implement and test the fold adapter for LSTM and causal Transformer candidates (synthetic contract only).
+- [x] Implement and test the verified-authority DQN/PPO fold bridge across all three risk scenarios (synthetic contract only).
+- [x] Integrate classical, deep and RL adapters into the authoritative central study runner with common ledgers and fail-closed input contracts; focused supervised/RL/authority tests pass. End-to-end real-data smoke remains part of the capability gate.
+- [x] Acquire a complete immutable SPY benchmark vintage (2,946 daily rows) and implement protocol binding so reporting consumes the separate pinned benchmark rather than assuming SPY is in the investable universe.
+- [x] Make experiment membership YAML-driven and component implementations discoverable only from trusted model-package folders through module metadata. Residual execution routing by hard-coded component ID is being removed before approval.
+- [x] Implement the fail-closed read-only expanded evidence postprocessor for all eleven WP7 tables, including complete inner/outer/seed/risk matrices and security contribution reconciliation.
+- [x] Generate real causal cross-fit predictions across 46 chronological windows, materialise the pinned store, bind its 19-column view to `F1_CAUSAL_STACK_V1`, and audit cross-view parity. The sealed manifest records `protected_labels_used_for_fit: false`.
+- [x] Freeze prepared protocol v4 against protocol-manifest set v5, with the causal stack and separate SPY benchmark paths and hashes embedded in the self-hashed, execution-forbidden study.
+- [x] Generate final score-blind calibration and the complete declared-arm capability
+  gate. The 400-security/full-history smoke passed all seven arms; the final 215-test
+  suite produced fresh per-arm receipts. A six-hour search ceiling selected the complete
+  two-proposal deadline tier at 6,378 seconds without opening outcomes.
+- [x] Finalise approved self-hashed protocol `expanded_closeout_approved_v2.yaml`
+  (`71e2126ac30cd500773a1ff590c59a5987ac44fc5652a88b64039828541b86f0`);
+  all seven arms, two outer folds, two inner folds, one seed and three RL risk scenarios
+  remain mandatory. Partial-family approval remains impossible.
+- [ ] Execute the deadline-feasible inner-HPO and outer-evaluation matrix; seal family locks before holdout access. The deadline-tier approved-v2 attempt failed before a complete RL candidate and before holdout access. Its completed supervised evidence is historical only because it predates the resume contract. Revised prepared-v8 binds point-in-time observed-history eligibility and exact weekly endpoint valuation; fresh capability evidence and approved-v3 remain required before relaunch.
+- [ ] Execute the descriptive holdout once, followed by the unified T+1/cost-reconciled model × risk test bench.
+- [ ] Generate supervised model-conditioned frontiers and all-model realised risk-return curves.
+- [x] Implement the WP7 report/dashboard/notebook consumers. Both report generation and
+  dashboard launch now work with zero arguments: the report generator selects the newest
+  completed audited expanded run, and `python -m trading_pipeline.dashboard` opens the newest
+  verified report. The main views show that run only; the monitoring tab compares compatible
+  reports with generated run labels, implementation scope (arm/component/device), timestamps,
+  protocol and code provenance. Focused verification: 19 tests passed on 27 September.
+- [x] Add and verify the read-only supervisor/heartbeat required for the unattended
+  study. It must wrap the authoritative `trading_pipeline.run` command without changing
+  research behaviour; persist stdout/stderr, lifecycle/warning/error events and terminal
+  status; sample process-tree RSS, RAM, CPU load/utilisation, GPU utilisation and VRAM;
+  degrade explicitly on CPU-only systems; and retain logs after interruption/failure.
+- [x] Add a fail-closed authoritative resume facility before the next launch. Resume
+  must create an immutable derived attempt with explicit parent lineage; bind the exact
+  approved protocol, inputs and code state; reuse only hash-verified complete cells and
+  checkpointed predictions; retain every earlier failure; reject tampering and protocol
+  drift; and preserve the family-lock/holdout boundary. The failed v2 attempt predates
+  code-state and prediction checkpoints and is therefore not eligible for silent reuse.
+  `trading_pipeline.run --study <approved> --resume-from <failed-run-dir>` and the
+  supervisor equivalent now create a new lineage-linked run, verify every source
+  checkpoint/artefact before reuse, persist per-cell predictions, reject protocol/input/
+  code drift, and retain the source unchanged. Focused resume/RL/authority verification
+  passed; the full replacement capability gate is still pending.
+- [ ] Generate WP7 report tables from the completed authoritative run, execute the final
+  notebook, and run the WP9 audit/completeness checks.
+- [ ] Freeze and commit the exact code revision, run/report IDs, hashes and operator manual.
+
+Remaining critical-path order: complete resume/checkpoint support and the revised RL
+price-eligibility protocol/gate; launch the newly approved protocol through the supervisor;
+run inner HPO and outer evaluation with family locks; open the descriptive holdout once; then
+generate the report, execute the notebook and complete the final audit/freeze.
+
+Real-data causal OOF materialisation is complete (46 chronological windows, with protected
+labels excluded from fitting). Deep and RL bridge results remain engineering/capability
+evidence only. No completed expanded HPO/outer-evaluation or holdout result exists. Prepared
+Approved protocol v2 cleared its representative smoke, calibration and capability gate,
+then failed as recorded above. Holdout access remains closed. Prepared-v7 is a newly
+self-hashed draft over unchanged canonical data/window/benchmark/causal-stack sources and
+the documented RL method correction; it cannot execute until fresh capability evidence
+produces a separately approved v3 protocol.
+
+The immutable research approval record is separate from this live checklist at
+`docs/planning/EXPANDED_STUDY_APPROVAL.md`, so operational updates cannot invalidate
+a frozen protocol. Data artefacts and feature columns are manifest-driven. Trusted
+model-package discovery and YAML-driven arm membership now remove the Python roster;
+the central runner now routes from trusted component capability metadata rather than a
+hard-coded Python model roster.
+
 ### Execution checkpoint — 26 September 2026, evening
 
 This checkpoint records implementation status, not research completion. It does not
@@ -31,7 +138,7 @@ replace generated run evidence or the acceptance criteria below.
 | Work package | Executed state | Remaining gate |
 |---|---|---|
 | WP0/WP2 authority | `trading_pipeline.run --study` now validates an approved, self-hashed protocol and six pinned manifests before any research I/O. Legacy `--config` behaviour is regression-tested. | The checked-in expanded study is deliberately unresolved. Central score-bearing orchestration, append-only trial/fit ledgers, outer selection lock and immutable run/audit output are not yet implemented. |
-| WP1 universe | A dated 503-row S&P 500 constituent snapshot and deterministic baseline-first 500-candidate CSV/TXT now exist; all original 100 and all candidate CIKs reconcile to the frozen SEC map. | Final-provenance admission `sp500-20260926-v3` is running resumably in a separate data root under the corrected sufficient-history rule. Stopped v1/v2 attempts are preliminary only and must not be cited as admission evidence. Freeze the achieved count only after v3 seals `admission.json`. |
+| WP1 universe | Final-provenance admission `sp500-20260926-v3` is sealed: 497 of 500 candidates admitted, 3 explicitly excluded for fewer than 260 market sessions, 497 F0-ready and 487 with both raw F1 SEC concepts. The derived admitted-universe and security-master hashes are frozen under `data/expanded_2026-09-26/admitted_v3`. | Materialise the canonical expanded market/fundamental/feature vintage from the admission raw artefacts and pin it into the study authority. Stopped v1/v2 attempts remain preliminary only and must not be cited. |
 | WP3 deep supervised | Causal LSTM/Transformer adapters and an evaluator-fold execution bridge have architecture parameters, train-only scaling, distinct stopping/scoring windows, canonical predictions and telemetry tests. | Invoke the bridge only from the future central study orchestrator; no real-data deep HPO result exists yet. |
 | WP4 RL | Registered DQN/PPO backends, PPO parameter telemetry and an actual synthetic PPO fit are tested. | Direct real-data calls remain intentionally forbidden until the central runner owns authority, ledgers, persistence and audit. No real PPO comparison exists yet. |
 | WP7 dashboard | The read-only dashboard now leads with an executive graphical story, shows validation/test side by side, uses a run dropdown and keeps evidence tables behind drill-down controls. It passes headless AppTest and is runnable on the existing audited report. | Expanded HPO/frontier/risk/test-bench views remain correctly empty until WP6 emits their hash-declared tables. |

@@ -92,11 +92,22 @@ class CausalSequenceView:
         values = np.zeros((len(targets), self.lookback, x.shape[1]), dtype=np.float32)
         time_mask = np.zeros((len(targets), self.lookback), dtype=bool)
         feature_mask = np.zeros_like(values, dtype=bool)
+        # Index each security once. A per-target full-table scan is quadratic at
+        # expanded-universe scale and does not change the causal view semantics.
+        histories: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+        grouped: dict[str, list[int]] = {}
+        for index, security in enumerate(ids):
+            grouped.setdefault(str(security), []).append(index)
+        for security, indices in grouped.items():
+            security_rows = np.asarray(indices, dtype=np.intp)
+            ordered = security_rows[np.argsort(dates[security_rows], kind="stable")]
+            histories[security] = ordered, dates[ordered]
         for row, target in enumerate(targets):
             # Sort by actual session, independent of input row order. The target's
             # own session is included because the signal is created after T.
-            history = np.flatnonzero((ids == ids[target]) & (dates <= dates[target]))
-            history = history[np.argsort(dates[history], kind="stable")][-self.lookback :]
+            ordered, ordered_dates = histories[str(ids[target])]
+            endpoint = np.searchsorted(ordered_dates, dates[target], side="right")
+            history = ordered[max(0, endpoint - self.lookback):endpoint]
             observed = np.isfinite(x[history])
             scaled = (np.where(observed, x[history], self.mean_) - self.mean_) / self.scale_
             size = len(history)

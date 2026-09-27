@@ -77,3 +77,80 @@ parity are engineering diagnostics, not model/device selection. All use of the a
 observed final test is labelled `diagnostic_reproduction_not_model_selection`. SHAP is
 optional; native gain and deterministic validation permutation importance are the
 guaranteed importance contract.
+
+2026-09-27 expanded-study upstream-layer decision: every one of the seven downstream
+arms receives the same F1 plus causal-stack information contract. The fixed helper
+layer is not a compared finalist: it generates expanding, purged out-of-fold E1
+Elastic Net, E2 HistGBT and E3 XGBoost predictions from F1, plus an equal-weight E4
+ensemble in fixed 60-session prediction blocks, using seed 41 and predeclared
+parameters. The longer score block bounds repeated helper-layer fitting while every
+prediction still comes from information frozen before the block begins. Missing outputs remain null with
+an availability mask and any median imputation is fit on the consumer's training
+partition only. The helper layer never reads the new holdout. For the frozen discrete
+RL action space, E0 is momentum, E1-E4 are those fresh-vintage helper sleeves and E5
+uses the score-blind predeclared E4 ensemble source with inverse-volatility weights. The
+volatility estimator uses 20 sessions; top K is 10. This supplies shared causal
+information without recursively using a candidate model's own outer/holdout result
+as its training feature.
+
+The same expanded protocol freezes 20 maximum deep-training epochs with patience 4
+and 5,000 environment steps per RL candidate. The three classical search spaces each
+contain 24 predeclared combinations spanning regularisation/capacity; score-blind
+deadline calibration selects a complete 8, 16 or 24-candidate subset uniformly within
+the classical families. These are exploratory-study ranges and do not alter Slice 1.
+
+2026-09-27 deadline-closeout protocol revision: the first approved full-tier run
+was stopped by the operator after four inner-fit cells on the 496-security vintage,
+before outer selection or holdout access. Its roughly five-minute elapsed time
+showed that the earlier 8-security bridge-smoke rate was not representative of
+full-vintage fitting. This is resource evidence only; no score, ranking or other
+model outcome is used for this revision. A new complete `deadline_complete` tier
+declares two proposals per classical, deep and RL family, including each of the
+three RL risk scenarios. The existing architecture and HPO search ranges remain
+available; the deterministic proposal sampler must produce two valid distinct
+candidates per family. The revised protocol freezes two outer and two inner folds
+and seed 41 only. All seven arms, conservative/balanced/aggressive risk scenarios,
+purge, embargo, stopping-window separation and sealed descriptive holdout remain
+mandatory. The one-seed design cannot estimate seed dispersion, and two-by-two
+fold evidence is deadline-constrained exploratory evidence, not confirmatory.
+The original prepared/approved protocol and stopped run remain historical records;
+the revised protocol requires fresh manifests, calibration, capability gate and
+approval artefacts with their own hashes before execution. Calibration estimates
+use per-arm timed cells multiplied by the complete proposal/fold/seed/scenario
+matrix. Full-vintage timing records are required for a credible deadline estimate;
+small-universe bridge timings cannot be extrapolated by this formula. This
+estimate excludes data preparation, final fits, holdout, reporting and retries,
+so a documented reserve is needed when the deadline is chosen.
+
+2026-09-27 production-device and deep-resource revision: executed engineering
+benchmarks, not model outcomes, determine the deadline protocol's devices and
+resource ceiling. PyTorch CUDA executed on the RTX 4060 Ti, but the initial deep
+adapter attempted full-dataset VRAM transfer and failed at roughly 24 GB. Training,
+loss evaluation and prediction now stream deterministic hyperparameter-sized
+minibatches; the 400-security full-history rerun stayed near 1.1--1.4 GB VRAM.
+Small MLP DQN/PPO CUDA smokes were materially slower than CPU and Stable-Baselines
+warned that MLP PPO is CPU-oriented, so both RL arms remain CPU. At 1,112,000 fit
+rows XGBoost CUDA completed its score-blind fit/predict bridge in 11.42 seconds
+versus 13.29 seconds on CPU, so XGBoost uses CUDA. LSTM and Transformer use CUDA;
+Elastic Net and HistGBT use CPU. The original 20-epoch/patience-4 ceiling exceeded
+34 minutes for one production-shaped LSTM-plus-Transformer smoke and would threaten
+the six-hour execution window. The deadline protocol therefore freezes eight epochs
+with patience two while retaining two distinct architecture/HPO candidates per deep
+family. Device and resource choices are engineering constraints and never use model
+scores, rankings or holdout outcomes.
+
+2026-09-27 RL observed-price eligibility correction: the approved-v2 production
+attempt failed closed before any complete RL candidate and before holdout access when
+one selected security lacked an adjusted-close row on an intervening daily session.
+The discrete RL policy acts weekly and its reward requires exact prices only at the
+T+1 execution and weekly endpoint. Requiring every intervening daily row was therefore
+stricter than the return definition and was not an information or valuation need.
+The revised protocol uses exact observed endpoint valuation with no carry-forward,
+imputation or identifier substitution; a missing required endpoint remains fatal.
+Selection at each signal also requires a contiguous observed trailing 20-session
+price history. That screen uses only then-available history, records per-signal
+exclusions and reasons, and permits re-entry only after the history window recovers.
+A whole-future-panel completeness screen is prohibited as lookahead. The change is
+a pre-RL-result method correction, not outcome-based selection, and requires new
+prepared, capability and approved artefacts while preserving approved v2 and its
+failed attempt unchanged.

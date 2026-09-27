@@ -31,3 +31,28 @@ constraints, and emit seed/device/resource telemetry. They do not replace or mod
 frozen Phase 2 runner. Real-data DQN/PPO optimisation remains blocked until the
 walk-forward protocol, causal upstream lineage, economic objective, risk constraints,
 seeds and compute budget receive explicit approval.
+
+## Expanded study bridge
+
+`study_integration.py` is the central runner's fold-level bridge. The runner
+must supply explicit transition, observation, frozen sleeve, price and source-hash
+rows to `build_study_selector_dataset`; this builder never reads the legacy run.
+It requires all six noncash sleeves on every signal date, a sorted market calendar,
+next-session close execution, complete held-price valuation and equal source
+lineage across fit and scoring episodes. Causal observation construction and
+upstream model-output hashes are the caller's responsibility.
+
+`execute_study_rl_trial` requires approved verified study authority and a declared
+fold, seed, risk scenario and search proposal. DQN and categorical PPO use the
+same seven-action environment and scenario-scaled frozen sleeves. The reward is
+the after-cost weekly log return minus `0.5 * risk_aversion * log_return**2`;
+the unpenalised net return remains in the equity curve. Each fit appends started,
+complete or failed records, resource telemetry and hashed cell artefacts. The
+deterministic evaluation checks that policy parameters, update counters, replay
+position and observation normaliser state have not changed. A direct invocation
+of the pilot registered runner on real data remains forbidden.
+
+The bridge is not itself an expanded research result. The authoritative runner
+must still create causal upstream observations and fold-specific sleeves, invoke
+this bridge for every proposal/fold/seed/scenario, seal selection before holdout,
+and audit the complete matrix.

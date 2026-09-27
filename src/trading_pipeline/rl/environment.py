@@ -91,8 +91,13 @@ class StrategySelectorEnv(gym.Env):
         if self._calendar_index[execution] != self._calendar_index[signal] + 1:
             raise ValueError("Frozen transition violates T+1 execution")
         start_equity = self._cash + sum(self._holdings.values())
-        for day in self._days_after(signal, execution):
-            self._mark_through(day)
+        if self.dataset.valuation_policy == "complete_daily_valuation_v1":
+            for day in self._days_after(signal, execution):
+                self._mark_through(day)
+        else:
+            # The next decision is weekly, so only the observed fill close is
+            # needed to value carried holdings before rebalancing.
+            self._mark_through(execution)
         before = self._cash + sum(self._holdings.values())
         target = self.dataset.targets[(self._step, action)]
         self._holdings, self._cash, self._turnover, cost, dollars = solve_rebalance(
@@ -104,8 +109,12 @@ class StrategySelectorEnv(gym.Env):
             if price is None:
                 raise ValueError(f"Selected security has no T+1 execution bar: {security} {execution}")
             self._last_prices[security] = price
-        for day in self._days_after(execution, end):
-            self._mark_through(day)
+        if self.dataset.valuation_policy == "complete_daily_valuation_v1":
+            for day in self._days_after(execution, end):
+                self._mark_through(day)
+        elif end != execution:
+            # Weekly reward uses the observed endpoint, with no interior mark.
+            self._mark_through(end)
         self._equity = self._cash + sum(self._holdings.values())
         if self._equity <= 0 or not np.isfinite(self._equity):
             raise ValueError("Environment equity became invalid")

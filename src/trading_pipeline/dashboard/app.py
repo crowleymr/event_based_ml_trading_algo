@@ -8,12 +8,17 @@ import pandas as pd
 import polars as pl
 import streamlit as st
 
-from trading_pipeline.dashboard.loader import load_catalog, load_report, load_rl_run
+from trading_pipeline.dashboard.loader import (
+    discover_expanded_reports, load_catalog, load_expanded_report, load_report,
+    load_rl_run, repository_root,
+)
 
 
 def _arguments():
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--report", required=True)
+    evidence = parser.add_mutually_exclusive_group()
+    evidence.add_argument("--report")
+    evidence.add_argument("--expanded-report")
     parser.add_argument("--rl-run")
     parser.add_argument("--catalog")
     args, _ = parser.parse_known_args()
@@ -36,6 +41,173 @@ def _rl(path: str):
 def _catalog(path: str):
     value = load_catalog(path)
     return value["provenance"], value["tables"]
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def _expanded(path: str):
+    value = load_expanded_report(path)
+    return value["provenance"], value["tables"]
+
+
+def _expanded_view(path: str) -> None:
+    provenance, tables = _expanded(str(Path(path).resolve()))
+    st.set_page_config(page_title="Expanded research evidence", layout="wide")
+    st.title("Expanded research evidence")
+    st.warning("Completed holdout evidence is descriptive. Do not select a model or risk scenario from these results.")
+    st.caption(f"Source run: {provenance['source_run_id']} · Claim status: {provenance.get('claim_status', 'not recorded')}")
+    with st.expander("Evidence provenance"):
+        st.json(provenance, expanded=False)
+
+    metrics = tables["final_testbench_metrics"]
+    model_ids = sorted(value for value in metrics["model_id"].drop_nulls().unique().to_list()
+                       if value != "B0_SPY")
+    with st.sidebar:
+        st.header("Evidence controls")
+        selected_models = st.multiselect("Models", model_ids, default=model_ids, key="expanded_models")
+        scenarios = sorted(metrics["risk_scenario"].drop_nulls().unique().to_list())
+        selected_scenarios = st.multiselect(
+            "Risk scenarios", scenarios, default=scenarios, key="expanded_scenarios"
+        )
+        st.caption("The SPY benchmark is retained in the test bench regardless of model filter.")
+
+    def selected(frame: pl.DataFrame) -> pl.DataFrame:
+        value = frame
+        if "model_id" in value.columns:
+            base_model = pl.col("model_id").str.split("|").list.first()
+            value = value.filter(base_model.is_in(selected_models) | (pl.col("model_id") == "B0_SPY"))
+        if "risk_scenario" in value.columns:
+            value = value.filter(pl.col("risk_scenario").is_in(selected_scenarios) |
+                                 (pl.col("model_id") == "B0_SPY") if "model_id" in value.columns
+                                 else pl.col("risk_scenario").is_in(selected_scenarios))
+        return value
+
+    tabs = st.tabs(["Pipeline and securities", "Architecture and HPO", "Risk and frontiers",
+                    "Final test bench", "Model monitoring / run comparisons", "Evidence register"])
+    with tabs[0]:
+        stage = tables["pipeline_stage_summary"]
+        if "count" in stage.columns:
+            st.bar_chart(stage.to_pandas(), x="stage", y="count")
+        st.dataframe(stage.to_pandas(), hide_index=True)
+        st.subheader("Security drill-down")
+        security = tables["pipeline_security_summary"]
+        tickers = sorted(security["ticker"].drop_nulls().unique().to_list()) if "ticker" in security.columns else []
+        ticker = st.selectbox("Ticker", ["All", *tickers], key="expanded_ticker")
+        if ticker != "All":
+            security = security.filter(pl.col("ticker") == ticker)
+        st.dataframe(security.to_pandas(), hide_index=True)
+    with tabs[1]:
+        for name in ("architecture_trial_summary", "hpo_trial_summary"):
+            st.subheader(name.replace("_", " ").capitalize())
+            st.dataframe(selected(tables[name]).to_pandas(), hide_index=True)
+    with tabs[2]:
+        st.subheader("Declared risk scenarios")
+        st.dataframe(selected(tables["risk_scenario_summary"]).to_pandas(), hide_index=True)
+        st.subheader("Model-conditioned efficient frontiers")
+        frontier = selected(tables["model_conditioned_frontier_points"])
+        dates = sorted(frontier["rebalance_date"].unique().to_list())
+        if dates:
+            day = st.selectbox("Rebalance date", dates, index=len(dates) - 1, key="expanded_rebalance")
+            dated = frontier.filter(pl.col("rebalance_date") == day)
+            completed = dated.filter(pl.col("status") == "complete")
+            if not completed.is_empty():
+                st.line_chart(completed.to_pandas(), x="expected_volatility", y="expected_return", color="model_id")
+            st.dataframe(dated.to_pandas(), hide_index=True)
+            weights = selected(tables["model_conditioned_frontier_weights"])
+            st.dataframe(weights.filter(pl.col("rebalance_date") == day).to_pandas(), hide_index=True)
+        st.subheader("Realised model risk-return curves")
+        realised = selected(tables["realised_risk_return_curve"])
+        if not realised.is_empty():
+            if "seed" in realised.columns:
+                realised = realised.with_columns(
+                    (pl.col("model_id") + " · seed " + pl.col("seed").cast(pl.String)).alias("series_label")
+                )
+            else:
+                realised = realised.with_columns(pl.col("model_id").alias("series_label"))
+            connected = realised.filter(pl.col("risk_control_monotonic"))
+            unconnected = realised.filter(~pl.col("risk_control_monotonic"))
+            if not connected.is_empty():
+                st.line_chart(connected.sort(["series_label", "risk_order"]).to_pandas(),
+                              x="annualised_volatility", y="annualised_return", color="series_label")
+            if not unconnected.is_empty():
+                st.info("Non-monotonic risk controls are shown as unconnected points.")
+                st.scatter_chart(unconnected.to_pandas(), x="annualised_volatility",
+                                 y="annualised_return", color="series_label")
+            st.dataframe(realised.to_pandas(), hide_index=True)
+    with tabs[3]:
+        st.subheader("Complete descriptive holdout matrix")
+        st.dataframe(selected(metrics).to_pandas(), hide_index=True)
+        equity = selected(tables["final_testbench_equity_curve"])
+        if not equity.is_empty():
+            equity = equity.with_columns(
+                (pl.col("model_id") + " · " + pl.col("risk_scenario") + " · seed "
+                 + pl.col("seed").cast(pl.String).fill_null("benchmark")).alias("series_label")
+            ) if "seed" in equity.columns else equity.with_columns(pl.col("display_label").alias("series_label"))
+            st.line_chart(equity.to_pandas(), x="session_date", y="equity", color="series_label")
+            st.line_chart(equity.to_pandas(), x="session_date", y="drawdown", color="series_label")
+        st.dataframe(equity.to_pandas(), hide_index=True)
+    with tabs[4]:
+        st.subheader("Comparable completed reports")
+        protocol_hash = provenance.get("protocol_sha256")
+        comparison_contract = provenance.get("comparison_contract")
+        reports = [report for report in discover_expanded_reports(repository_root())
+                   if (comparison_contract and
+                       report["provenance"].get("comparison_contract") == comparison_contract)
+                   or (not comparison_contract and protocol_hash and
+                       report["provenance"].get("protocol_sha256") == protocol_hash)]
+        if not reports:
+            reports = [{"root": Path(path).resolve(), "provenance": provenance, "tables": tables}]
+        st.caption("Each row is a generated model × seed × risk result. Reports share the same evaluation calendar, execution, cost and metric contract; no values are pooled or used for selection.")
+        if len({report["provenance"].get("protocol_sha256") for report in reports}) > 1:
+            st.warning("Comparable reports use different research protocols. Review budget, folds, seeds, devices and arm mappings before interpreting differences.")
+        rows = []
+        for report in reports:
+            source = report["provenance"]
+            summary = source.get("protocol_summary", {})
+            arm_mappings = summary.get("arms", [])
+            run_label = f"{summary.get('study_id', source['source_run_id'])} · {summary.get('budget_tier', 'unlabelled budget')}"
+            implementation_scope = ", ".join(
+                f"{arm.get('id')}={arm.get('component_id')}[{arm.get('requested_device')}]"
+                for arm in arm_mappings
+            )
+            frame = report["tables"]["final_testbench_metrics"].to_pandas()
+            frame.insert(0, "source_run_id", source["source_run_id"])
+            frame.insert(1, "run_label", run_label)
+            frame.insert(2, "implementation_scope", implementation_scope)
+            frame.insert(3, "source_completed_at_utc", source.get("source_completed_at_utc"))
+            frame.insert(4, "report_generated_at_utc", source.get("generated_at_utc"))
+            frame.insert(5, "protocol_sha256", source.get("protocol_sha256"))
+            frame.insert(6, "source_git_commit", source.get("source_git_commit"))
+            frame.insert(7, "report_code_version", source.get("code_version"))
+            frame.insert(8, "budget_tier", summary.get("budget_tier"))
+            frame.insert(9, "outer_folds", summary.get("outer_folds"))
+            frame.insert(10, "inner_folds", summary.get("inner_folds"))
+            frame.insert(11, "seeds", str(summary.get("seeds")))
+            frame.insert(12, "requested_device", summary.get("requested_device"))
+            rows.append(frame)
+        monitoring = pd.concat(rows, ignore_index=True)
+        columns = [name for name in ("source_run_id", "run_label", "implementation_scope",
+                   "source_completed_at_utc", "report_generated_at_utc",
+                   "budget_tier", "outer_folds", "inner_folds", "seeds", "requested_device",
+                   "model_id", "seed", "risk_scenario", "total_return",
+                   "annualised_return", "annualised_volatility", "sharpe", "maximum_drawdown",
+                   "average_turnover", "cumulative_transaction_cost", "benchmark_relative_total_return",
+                   "protocol_sha256", "source_git_commit", "report_code_version")
+                   if name in monitoring.columns]
+        st.dataframe(monitoring[columns], hide_index=True)
+        st.json({"selected_report": provenance["source_run_id"],
+                 "compatible_run_count": len(reports),
+                 "protocol_summary": provenance.get("protocol_summary", {}),
+                 "comparison_contract": comparison_contract,
+                 "protocol_sha256": protocol_hash}, expanded=False)
+        with st.expander("Protocol details for compared runs"):
+            st.json({report["provenance"]["source_run_id"]: {
+                "protocol_sha256": report["provenance"].get("protocol_sha256"),
+                "protocol_summary": report["provenance"].get("protocol_summary", {}),
+                "source_git_commit": report["provenance"].get("source_git_commit"),
+                "report_code_version": report["provenance"].get("code_version"),
+            } for report in reports}, expanded=False)
+    with tabs[5]:
+        st.dataframe(tables["question_and_assumption_register"].to_pandas(), hide_index=True)
 
 
 def _filtered(frame, split=None, experiments=None):
@@ -79,6 +251,16 @@ def _metric_label(name: str) -> str:
 
 def main():
     args = _arguments()
+    if not args.report and not args.expanded_report:
+        reports = discover_expanded_reports(repository_root())
+        if not reports:
+            st.error("No completed expanded report is available. Generate one with: "
+                     "python -m trading_pipeline.reporting.expanded_closeout")
+            st.stop()
+        args.expanded_report = str(reports[0]["root"])
+    if args.expanded_report:
+        _expanded_view(args.expanded_report)
+        return
     provenance, tables = _report(str(Path(args.report).resolve()))
     st.set_page_config(page_title="Trading research evidence", layout="wide")
     st.title("Trading research evidence")

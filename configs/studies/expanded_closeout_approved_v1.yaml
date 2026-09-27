@@ -1,0 +1,280 @@
+schema_version: 3
+kind: optimisation_study
+study_id: expanded_closeout_exploratory_v1
+status: approved
+authority:
+  parent_protocol: slice1_locked_evidence_preserved
+  approval_record: docs/planning/EXPANDED_STUDY_APPROVAL.md
+  protocol_sha256: d34114ffd23963cfa8db7a8a0b686f4cfb51ace57790efc21edb93eb129ac382
+  input_sha256:
+    docs/planning/EXPANDED_STUDY_APPROVAL.md: 4bf5b2b2c92fee0c5a6fe474c78342c9a5245d94aba2da503353e016b1ae85f0
+    data/expanded_2026-09-26/protocol_v5/snapshot_manifest.json: abb442fea1811ba219ffef5254ccd3f72c0b240aeb86d64861b682f588be46fc
+    data/expanded_2026-09-26/protocol_v5/exposure_ledger.json: 4011e765518ec4c13bcd614017c76c08ab49000aec1a55a159e0ab46f9947cd1
+    data/expanded_2026-09-26/protocol_v5/outer_windows.json: 13cb0905d7f6966db0b8898490895ae55bf797d7676c8f4fe4e424fcb74e1a37
+    data/expanded_2026-09-26/protocol_v5/inner_windows.json: 4c7a94c4734b75ebd33efc518daa36f55c812df73897093d8926d8cd83cc7b2a
+    data/expanded_2026-09-26/protocol_v5/final_holdout.json: a5eb29565abc235ccaec005826c96ee6d27233fecfc3c63f1c9f1981b898651c
+  capability_gate: data/expanded_2026-09-26/capability_gate_v1.json
+  capability_gate_sha256: 0e1075ce546df5ec15a01424b13821c0d73680b9a673c8bb80ca4d76746763a1
+  prepared_protocol_sha256: a0aa369b8907ba2611f0dcf12253ad5ce78cfd66c0ce198bcd2c0d0b5430d4bf
+data:
+  vintage_id: expanded_20260926_v1
+  snapshot_manifest: data/expanded_2026-09-26/protocol_v5/snapshot_manifest.json
+  exposure_ledger: data/expanded_2026-09-26/protocol_v5/exposure_ledger.json
+  forbidden_selection_role: legacy_observed_final
+  group_by: session_date
+  universe_cap: 500
+  feature_view: F1_CAUSAL_STACK_V1
+  upstream_predictions: causal_out_of_fold_only
+  benchmark_contract:
+    benchmark_id: B0-SPY
+    manifest_path: data/expanded_2026-09-26/benchmark_spy_v1/manifest.json
+    manifest_sha256: aac68141de01e8de4df570e16f468b3b5d3cc0fe549136edd6f0675731a873a5
+    bars_path: data/expanded_2026-09-26/benchmark_spy_v1/bars.parquet
+    bars_sha256: 4af03872ef75313dc1c3f548ed1555d760ddce8662500882e4ab5760a7de0c2f
+  upstream_layer:
+    layer_id: F1_BASE_CROSSFIT_V1
+    feature_set_id: F1
+    prediction_role: inner_oof
+    seed: 41
+    cross_fit:
+      scheme: expanding_chronological_blocks
+      min_fit_sessions: 120
+      score_block_sessions: 60
+      label_purge: information_interval_overlap
+    missing_output_policy: null_plus_mask_train_partition_only_median_imputation
+    outputs:
+    - id: E1
+      component_id: supervised.elastic_net.v1
+      parameters:
+        alpha: 0.001
+        l1_ratio: 0.5
+    - id: E2
+      component_id: supervised.hist_gbt.v1
+      parameters:
+        max_leaf_nodes: 15
+        l2_regularization: 10.0
+    - id: E3
+      component_id: supervised.xgboost.v1
+      parameters:
+        max_depth: 3
+        reg_lambda: 10.0
+    - id: E4
+      derived_from:
+      - E1
+      - E2
+      - E3
+      aggregation: equal_weight_mean
+  rl_inputs:
+    eligibility_policy: complete_causal_upstream_dates_only
+    model_sleeve_components:
+      E1: supervised.elastic_net.v1
+      E2: supervised.hist_gbt.v1
+      E3: supervised.xgboost.v1
+      E4: derived.equal_weight_mean.v1
+    model_outputs_path: data/expanded_2026-09-26/causal_stack_v2/producer/source_predictions.parquet
+    model_outputs_sha256: 58b0331181f895ca848c070a1fdec947cd4bc91df5b7de6262bf00b1b10c9137
+    bars_path: data/expanded_2026-09-26/vintage_v1/features/features.parquet
+    bars_sha256: 9e62981ac19c5de29ffcbfec29409e577151728db2a3d1873acd92d3bc10819e
+  feature_columns:
+    F0:
+    - return_5d
+    - return_10d
+    - return_20d
+    - vol_5d
+    - vol_20d
+    - avg_dollar_volume_20d
+    - volume_ratio_20d
+    - ma_distance_20d
+    - price_to_52w_high
+    F1:
+    - return_5d
+    - return_10d
+    - return_20d
+    - vol_5d
+    - vol_20d
+    - avg_dollar_volume_20d
+    - volume_ratio_20d
+    - ma_distance_20d
+    - price_to_52w_high
+    - latest_eps
+    - latest_net_income
+  augmented_feature_contract:
+    feature_path: data/expanded_2026-09-26/causal_stack_v2/augmented_features.parquet
+    feature_sha256: 36dce652a01b540368d1146e7199dd79d09a9e371e74c01f3c3261cba064ab6a
+    feature_columns:
+    - return_5d
+    - return_10d
+    - return_20d
+    - vol_5d
+    - vol_20d
+    - avg_dollar_volume_20d
+    - volume_ratio_20d
+    - ma_distance_20d
+    - price_to_52w_high
+    - latest_eps
+    - latest_net_income
+    - upstream_prediction_0
+    - upstream_prediction_0_is_available
+    - upstream_prediction_1
+    - upstream_prediction_1_is_available
+    - upstream_prediction_2
+    - upstream_prediction_2_is_available
+    - upstream_prediction_3
+    - upstream_prediction_3_is_available
+    source_manifest: data/expanded_2026-09-26/causal_stack_v2/manifest.json
+    source_manifest_sha256: c566ecd753857de1ade537233d3a948808122552c67b33ec352fd4ff380df7a4
+validation:
+  scheme: nested_purged_expanding_walk_forward
+  outer_windows_manifest: data/expanded_2026-09-26/protocol_v5/outer_windows.json
+  inner_windows_manifest: data/expanded_2026-09-26/protocol_v5/inner_windows.json
+  purge: information_interval_overlap
+  embargo_sessions: 5
+  stopping_window: distinct_chronological_tail
+  final_holdout:
+    manifest: data/expanded_2026-09-26/protocol_v5/final_holdout.json
+    sealed: true
+    requires_selection_lock: true
+    claim_status: exploratory_closeout_not_confirmatory
+  window_policy:
+    holdout_sessions: 60
+    outer_folds: 5
+    outer_score_sessions: 20
+    inner_folds: 3
+    inner_score_sessions: 10
+    min_fit_sessions: 120
+    stopping_sessions: 10
+experiment_arms:
+- id: EN_F1_STACK
+  interface: SupervisedModel
+  component_id: supervised.elastic_net.v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: supervised_ic_v1
+- id: HGBT_F1_STACK
+  interface: SupervisedModel
+  component_id: supervised.hist_gbt.v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: supervised_ic_v1
+- id: XGB_F1_STACK
+  interface: SupervisedModel
+  component_id: supervised.xgboost.v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: supervised_ic_v1
+- id: LSTM_F1_STACK
+  interface: SupervisedModel
+  component_id: supervised.lstm.v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: supervised_ic_v1
+- id: TRANSFORMER_F1_STACK
+  interface: SupervisedModel
+  component_id: supervised.causal_transformer.v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: supervised_ic_v1
+- id: DQN_SELECTOR
+  interface: RLPolicy
+  component_id: rl_dqn_sb3_v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: rl_certainty_equivalent_v1
+- id: PPO_SELECTOR
+  interface: RLPolicy
+  component_id: rl_ppo_categorical_sb3_v1
+  feature_set_id: F1_CAUSAL_STACK_V1
+  objective_id: rl_certainty_equivalent_v1
+objectives:
+  supervised_ic_v1:
+    status: approved_for_exploratory_protocol
+    primary: mean_daily_cross_sectional_spearman_ic
+    direction: maximize
+    tie_breakers:
+    - rmse_minimize
+    - complexity_minimize
+    - latency_minimize
+  rl_certainty_equivalent_v1:
+    status: approved_for_exploratory_protocol
+    primary: weekly_net_certainty_equivalent_return
+    direction: maximize
+    risk_scenarios:
+      conservative:
+        risk_aversion: 8.0
+      balanced:
+        risk_aversion: 4.0
+      aggressive:
+        risk_aversion: 2.0
+selection:
+  rule_id: practical_equivalence_then_parsimony_v1
+  practical_equivalence_tolerance: 0.001
+  final_test_selection: forbidden
+  require_complete_folds: true
+  require_all_registered_seeds: true
+  retain_failed_and_pruned_trials: true
+search:
+  policy_id: full_deadline_tier_v1
+  method: deterministic_random_with_multifidelity_for_deep_models
+  budgets:
+    classical_per_family: 24
+    deep_supervised_per_family: 18
+    rl_per_family_per_risk_scenario: 12
+  architecture_is_hyperparameter: true
+  deep_training:
+    epochs: 20
+    patience: 4
+  rl_training:
+    total_timesteps: 5000
+  real_data_execution: enabled
+reproducibility:
+  seeds:
+  - 41
+  - 42
+  - 43
+  requested_device: auto
+  cpu_fallback_required: true
+  threads_per_fit: 1
+portfolio:
+  execution: action_at_T_filled_at_T_plus_1_close
+  cost_bps_one_way: 10
+  top_k: 10
+  volatility_lookback_sessions: 20
+  long_only: true
+  leverage: false
+  covariance_estimator: trailing_sample_covariance_v1
+  frontier_grid: fixed_risk_aversion
+  rl_sleeves:
+    E0: momentum_return_20d_equal_weight
+    E1: upstream_layer_E1_equal_weight
+    E2: upstream_layer_E2_equal_weight
+    E3: upstream_layer_E3_equal_weight
+    E4: upstream_layer_E4_equal_weight
+    E5: predeclared_E4_inverse_volatility
+  e5_source: E4
+  e5_source_rule:
+    eligible:
+    - E4
+    selection_partition: none_score_blind_predeclared
+    primary: not_applicable_fixed_baseline
+  risk_scenarios:
+    conservative:
+      gross_exposure_cap: 0.6
+      annualised_volatility_target: 0.08
+      max_position: 0.05
+      cash_permitted: true
+    balanced:
+      gross_exposure_cap: 0.8
+      annualised_volatility_target: 0.12
+      max_position: 0.1
+      cash_permitted: true
+    aggressive:
+      gross_exposure_cap: 1.0
+      annualised_volatility_target: 0.16
+      max_position: 0.2
+      cash_permitted: true
+inference:
+  claim_status: exploratory_closeout_not_confirmatory
+  benchmark: SPY
+  report_all_risk_scenarios: true
+  report_dominated_outcomes: true
+  classical_frontier_eligible_interfaces:
+  - SupervisedModel
+  realised_risk_return_curve_all_finalists: true
+outputs:
+  runs_root: runs/expanded_closeout
+  reports_root: reports/expanded_closeout
+  immutable_completion_manifest: true

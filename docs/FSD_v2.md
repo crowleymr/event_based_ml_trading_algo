@@ -309,6 +309,34 @@ python -m trading_pipeline.run --config configs/poc.yaml
 ### Tracking
 Filesystem artefact contract is mandatory. MLflow is preferred only if it adds little friction.
 
+Long-running local studies must also support a **read-only supervisor/heartbeat**.
+The supervisor may launch and observe the authoritative `trading_pipeline.run`
+process, but must not implement training, selection, tuning, backtesting, artefact
+repair or outcome-dependent control. It must preserve timestamped stdout/stderr and
+structured lifecycle events, and periodically record wall-clock elapsed time,
+heartbeat time, process-tree RSS, system RAM availability/utilisation, CPU load and
+utilisation, and—when available—GPU utilisation and VRAM used/total. Missing GPU or
+platform counters must be recorded explicitly and must not fail CPU-only execution.
+Logs must survive normal completion, model failure, interruption and supervisor
+failure, and must remain separate from immutable research-result artefacts.
+
+Expanded studies must support fail-closed continuation through immutable derived
+attempts. A resumed attempt must bind its parent run, exact approved protocol and
+input hashes, code-state hash, seeds and completed-cell checkpoint hashes. It may
+reuse only complete, schema-validated, untampered cells and their persisted
+predictions; incomplete cells are rerun. Parent failures and logs remain immutable.
+Protocol or code-state drift, missing prediction checkpoints, ledger disagreement or
+holdout-boundary ambiguity must reject resume. Holdout access remains forbidden until
+the derived attempt verifies and seals the complete family locks.
+
+For the expanded weekly RL selector, portfolio reward must use exact observed T+1
+execution and weekly endpoint prices. Intervening daily marks are not required by the
+weekly return definition and must not be filled or substituted. A missing required
+endpoint fails closed. Security eligibility at a signal must use only the declared
+contiguous trailing observed-price history then available; exclusions and missing-date
+reasons are auditable per signal, and full-future-panel completeness screening is
+forbidden as lookahead. This expanded-study rule does not alter locked Slice 1.
+
 ### GitHub Actions
 Weekend target: tests + smoke run + artefact upload. Full 10-year training may remain local. CI/GitHub Actions must run on CPU without requiring a GPU, CUDA, or GPU-specific dependencies.
 
@@ -333,6 +361,12 @@ runs/<run_id>/
 ```
 
 Metadata includes Git commit, timestamp, model, feature set, portfolio, label horizon, split dates, cost assumption and seed. Detect and record CPU/GPU availability (including CPU model/core count and GPU model/VRAM where available), CUDA toolkit/runtime version where installed, relevant package versions, and the actual chosen device per model. Distinguish driver-reported CUDA compatibility from an installed toolkit/runtime; record unavailable or unknown values explicitly. Detection must not fail a CPU-only run. Persist reproducibility settings and any GPU fallback reason.
+
+For supervised long-running execution, write operational logs to a separate
+versioned directory containing the exact child command, supervisor metadata,
+timestamped combined console output, structured events, periodic resource samples
+and a terminal status/exit code. The monitoring directory is operational evidence,
+not a source of model metrics and not an input to model selection.
 
 ## 24. Mandatory Tests
 ### Data

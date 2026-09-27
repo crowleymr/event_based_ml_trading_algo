@@ -70,6 +70,13 @@ def load_study(path: str | Path, *, allow_engineering_draft: bool = True) -> Res
             raise ValueError(f"Unsupported experiment arm interface: {arm.get('interface')}")
         if not arm.get("component_id"):
             raise ValueError(f"Experiment arm {arm['id']} requires component_id")
+    if any(arm["interface"] == "RLPolicy" for arm in arms):
+        inputs = value.get("data", {}).get("rl_inputs", {})
+        if inputs.get("eligibility_policy") == "complete_causal_upstream_dates_plus_observed_price_history_v2":
+            if inputs.get("price_eligibility_policy") != "observed_history_and_endpoint_valuation_v1":
+                raise ValueError("Revised RL eligibility requires its explicit price_eligibility_policy")
+        elif inputs.get("price_eligibility_policy") == "observed_history_and_endpoint_valuation_v1":
+            raise ValueError("Revised RL price policy requires the paired eligibility_policy")
     engineering_only = value["status"] == "draft"
     if engineering_only and not allow_engineering_draft:
         raise ValueError("Draft studies are restricted to engineering verification")

@@ -22,7 +22,10 @@ def _space(family: str) -> Mapping[str, Any]:
         "activation": {"type": "categorical", "values": ["relu", "gelu"]},
         "optimizer": {"type": "categorical", "values": ["adam", "adamw"]},
         "learning_rate": {"type": "loguniform", "low": 1e-4, "high": 3e-3},
-        "batch_size": {"type": "categorical", "values": [64, 128]},
+        # The expanded universe makes 64/128-row CUDA batches transfer-bound.
+        # These sizes remain small relative to 16 GiB VRAM while exercising a
+        # meaningful optimisation range at the declared production scale.
+        "batch_size": {"type": "categorical", "values": [512, 1024]},
     }
     if family == "transformer":
         parameters["heads"] = {"type": "categorical", "values": [2, 4]}
@@ -34,7 +37,7 @@ LSTM_SPEC = ComponentSpec(
     component_id="supervised.lstm.v1", interface="SupervisedModel",
     implementation="trading_pipeline.modelling.supervised_models.deep_sequence.LSTMModel",
     research_enabled=False,
-    capabilities={"train_only_preprocessing": True, "stopping_data": True,
+    capabilities={"study_adapter": True, "train_only_preprocessing": True, "stopping_data": True,
                   "continuation": False, "staged_metrics": True,
                   "optional_dependency": True, "cpu": True, "cuda": True,
                   "sequence_view": True},
@@ -43,7 +46,7 @@ TRANSFORMER_SPEC = ComponentSpec(
     component_id="supervised.causal_transformer.v1", interface="SupervisedModel",
     implementation="trading_pipeline.modelling.supervised_models.deep_sequence.CausalTransformerModel",
     research_enabled=False,
-    capabilities={"train_only_preprocessing": True, "stopping_data": True,
+    capabilities={"study_adapter": True, "train_only_preprocessing": True, "stopping_data": True,
                   "continuation": False, "staged_metrics": True,
                   "optional_dependency": True, "cpu": True, "cuda": True,
                   "sequence_view": True},
@@ -170,14 +173,29 @@ class DeepSequenceModel(SupervisedModel):
             raise ValueError("Targets must be finite, one-dimensional and row-aligned")
         return x, target
 
-    @staticmethod
-    def _tensors(batch: SequenceBatch, target, device, torch):
-        tensors = [torch.as_tensor(batch.values, device=device),
-                   torch.as_tensor(batch.time_mask, device=device),
-                   torch.as_tensor(batch.feature_mask, device=device)]
+    def _tensors(self, batch: SequenceBatch, target, device, torch, indices):
+        """Transfer only one bounded host batch to the selected device."""
+        indices = np.asarray(indices, dtype=np.intp)
+        if indices.ndim != 1 or not 0 < len(indices) <= self._params["batch_size"]:
+            raise ValueError("Device transfer exceeds declared batch_size")
+        tensors = [torch.as_tensor(batch.values[indices], device=device),
+                   torch.as_tensor(batch.time_mask[indices], device=device),
+                   torch.as_tensor(batch.feature_mask[indices], device=device)]
         if target is not None:
-            tensors.append(torch.as_tensor(target, device=device))
+            tensors.append(torch.as_tensor(target[indices], device=device))
         return tensors
+
+    def _mean_squared_error(self, model, batch: SequenceBatch, target, device, torch) -> float:
+        """Aggregate sample-weighted MSE without a full-batch device allocation."""
+        squared = torch.zeros((), device=device, dtype=torch.float64)
+        for start in range(0, len(batch.values), self._params["batch_size"]):
+            indices = np.arange(start, min(start + self._params["batch_size"],
+                                           len(batch.values)))
+            values, time_mask, feature_mask, actual = self._tensors(
+                batch, target, device, torch, indices)
+            prediction = model(values, time_mask, feature_mask)
+            squared += torch.sum((prediction - actual) ** 2, dtype=torch.float64)
+        return float((squared / len(batch.values)).item())
 
     def fit(self, x, y, *, context: FitContext, stopping_data=None):
         train, train_y = self._validate_batch(x, y)
@@ -208,8 +226,6 @@ class DeepSequenceModel(SupervisedModel):
         model = _network(self.FAMILY, self._feature_count, self._params).to(actual)
         optimizer_type = torch.optim.AdamW if self._params["optimizer"] == "adamw" else torch.optim.Adam
         optimizer = optimizer_type(model.parameters(), lr=self._params["learning_rate"])
-        train_t = self._tensors(train, train_y, actual, torch)
-        stop_t = self._tensors(stop, stop_y, actual, torch)
         generator = torch.Generator(device="cpu").manual_seed(context.seed)
         epochs = int(context.fidelity.get("epochs", self._training_config["epochs"]))
         if epochs < 1:
@@ -223,16 +239,17 @@ class DeepSequenceModel(SupervisedModel):
             model.train()
             order = torch.randperm(len(train.values), generator=generator)
             for indices in order.split(self._params["batch_size"]):
-                indices = indices.to(actual)
+                values, time_mask, feature_mask, target = self._tensors(
+                    train, train_y, actual, torch, indices.numpy())
                 optimizer.zero_grad(set_to_none=True)
-                pred = model(*(part[indices] for part in train_t[:3]))
-                loss = torch.mean((pred - train_t[3][indices]) ** 2)
+                pred = model(values, time_mask, feature_mask)
+                loss = torch.mean((pred - target) ** 2)
                 loss.backward()
                 optimizer.step()
             model.eval()
             with torch.no_grad():
-                train_loss = torch.mean((model(*train_t[:3]) - train_t[3]) ** 2).item()
-                validation_loss = torch.mean((model(*stop_t[:3]) - stop_t[3]) ** 2).item()
+                train_loss = self._mean_squared_error(model, train, train_y, actual, torch)
+                validation_loss = self._mean_squared_error(model, stop, stop_y, actual, torch)
             if not np.isfinite(train_loss) or not np.isfinite(validation_loss):
                 raise ValueError("Deep training produced a nonfinite loss")
             trace.append({"epoch": epoch, "train_mse": float(train_loss),
@@ -265,9 +282,14 @@ class DeepSequenceModel(SupervisedModel):
         batch, _ = self._validate_batch(x)
         torch, _ = _torch()
         self._model.eval()
+        predictions = []
         with torch.no_grad():
-            values = self._model(*self._tensors(batch, None, self._actual_device, torch))
-        return values.cpu().numpy().astype(np.float64)
+            for start in range(0, len(batch.values), self._params["batch_size"]):
+                indices = np.arange(start, min(start + self._params["batch_size"],
+                                               len(batch.values)))
+                tensors = self._tensors(batch, None, self._actual_device, torch, indices)
+                predictions.append(self._model(*tensors).cpu().numpy())
+        return np.concatenate(predictions).astype(np.float64)
 
     def save(self, path: str | Path) -> None:
         if self._model is None:
@@ -310,3 +332,9 @@ class LSTMModel(DeepSequenceModel):
 class CausalTransformerModel(DeepSequenceModel):
     FAMILY = "transformer"
     SPEC = TRANSFORMER_SPEC
+
+
+COMPONENT_REGISTRATIONS = (
+    (LSTM_SPEC, LSTMModel),
+    (TRANSFORMER_SPEC, CausalTransformerModel),
+)

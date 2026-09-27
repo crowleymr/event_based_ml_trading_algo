@@ -21,6 +21,8 @@ XGBOOST_SPEC = ComponentSpec(
     version=1,
     research_enabled=False,
     capabilities={
+        "study_adapter": True,
+        "tabular_view": True,
         "train_only_preprocessing": True,
         "stopping_data": True,
         "continuation": False,
@@ -36,8 +38,8 @@ XGBOOST_SEARCH_SPACE: Mapping[str, Any] = {
     "schema_version": 1,
     "strategy": "explicit_grid",
     "parameters": {
-        "max_depth": {"type": "categorical", "values": [3, 5]},
-        "reg_lambda": {"type": "categorical", "values": [1.0, 10.0]},
+        "max_depth": {"type": "categorical", "values": [2, 3, 4, 5, 6, 8]},
+        "reg_lambda": {"type": "categorical", "values": [0.1, 1.0, 10.0, 100.0]},
     },
 }
 
@@ -153,3 +155,6 @@ class XGBoostModel(SupervisedModel):
         if self._model is None:
             raise RuntimeError("supervised.xgboost.v1 has not been fitted")
         return self._model
+
+
+COMPONENT_REGISTRATIONS = ((XGBOOST_SPEC, XGBoostModel),)

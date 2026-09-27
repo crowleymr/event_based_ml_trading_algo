@@ -21,6 +21,7 @@ def test_model_conditioned_frontier_is_complete_and_reconciled():
         risk_aversions=[8.0, 4.0, 2.0],
         gross_exposure_cap=0.8,
         max_position=0.5,
+        annualised_volatility_cap=0.10,
         covariance_id="sample_cov_60d_v1",
         input_sha256="abc123",
     )
@@ -28,6 +29,7 @@ def test_model_conditioned_frontier_is_complete_and_reconciled():
     assert weights.height == 9
     assert set(points["status"]) == {"complete"}
     assert points["gross_exposure"].max() <= 0.8 + 1e-8
+    assert points["expected_volatility"].max() <= 0.10 + 1e-6
     reconciled = weights.group_by("point_id").agg(pl.col("weight").sum().alias("weight_sum"))
     assert reconciled["weight_sum"].max() <= 0.8 + 1e-8
     assert points.sort("risk_aversion")["expected_volatility"].to_list() == sorted(

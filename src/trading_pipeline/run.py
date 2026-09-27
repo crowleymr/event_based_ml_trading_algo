@@ -28,6 +28,7 @@ from trading_pipeline.tracking.artefacts import input_vintage, json_write, plots
 from trading_pipeline.tracking.telemetry import write_training_telemetry
 from trading_pipeline.experiments.schema import load_study
 from trading_pipeline.experiments.authority import verify_study_authority
+from trading_pipeline.experiments.study_runner import run_study
 
 
 def run(cfg):
@@ -260,17 +261,21 @@ def main():
     source.add_argument("--config", help="Locked Slice 1 pipeline config")
     source.add_argument("--study", help="Expanded optimisation study protocol")
     parser.add_argument("--ingest-only", action="store_true")
+    parser.add_argument("--resume-from", type=Path,
+                        help="Failed expanded run to continue in a new lineage-linked run")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     if args.study:
         if args.ingest_only:
             parser.error("--ingest-only applies only to --config")
         study = load_study(args.study, allow_engineering_draft=False)
-        verify_study_authority(study, repository_root=Path(__file__).resolve().parents[2])
-        raise RuntimeError(
-            "Expanded study authority verified, but score-bearing study execution "
-            "is not integrated; no data or holdout was opened"
-        )
+        repository_root = Path(__file__).resolve().parents[2]
+        authority = verify_study_authority(study, repository_root=repository_root)
+        print(run_study(study, authority, repository_root=repository_root,
+                        resume_from=args.resume_from))
+        return
+    if args.resume_from:
+        parser.error("--resume-from applies only to --study")
     cfg = load_config(args.config)
     if args.ingest_only:
         ingest(cfg)

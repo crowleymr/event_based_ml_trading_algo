@@ -20,6 +20,8 @@ HIST_GBT_SPEC = ComponentSpec(
     version=1,
     research_enabled=False,
     capabilities={
+        "study_adapter": True,
+        "tabular_view": True,
         "train_only_preprocessing": True,
         "stopping_data": False,
         "continuation": False,
@@ -32,8 +34,8 @@ HIST_GBT_SEARCH_SPACE: Mapping[str, Any] = {
     "schema_version": 1,
     "strategy": "explicit_grid",
     "parameters": {
-        "max_leaf_nodes": {"type": "categorical", "values": [7, 15]},
-        "l2_regularization": {"type": "categorical", "values": [1.0, 10.0]},
+        "max_leaf_nodes": {"type": "categorical", "values": [7, 15, 31, 63, 127, 255]},
+        "l2_regularization": {"type": "categorical", "values": [0.0, 1.0, 10.0, 100.0]},
     },
 }
 
@@ -50,3 +52,6 @@ class HistGradientBoostingModel(LegacySklearnAdapter):
 
     def _build(self, *, seed: int):
         return build_gbt(dict(self._params), seed)
+
+
+COMPONENT_REGISTRATIONS = ((HIST_GBT_SPEC, HistGradientBoostingModel),)
