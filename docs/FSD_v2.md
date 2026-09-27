@@ -312,8 +312,11 @@ Filesystem artefact contract is mandatory. MLflow is preferred only if it adds l
 Long-running local studies must also support a **read-only supervisor/heartbeat**.
 The supervisor may launch and observe the authoritative `trading_pipeline.run`
 process, but must not implement training, selection, tuning, backtesting, artefact
-repair or outcome-dependent control. It must preserve timestamped stdout/stderr and
-structured lifecycle events, and periodically record wall-clock elapsed time,
+repair or outcome-dependent control. It must preserve stdout/stderr with one
+operator-local timestamp at whole-second precision for human-readable output and
+retain UTC timestamps in structured lifecycle events for machine correlation. It must
+not prepend a second UTC/GMT timestamp to already timestamped child output, and must
+periodically record wall-clock elapsed time,
 heartbeat time, process-tree RSS, system RAM availability/utilisation, CPU load and
 utilisation, and—when available—GPU utilisation and VRAM used/total. Missing GPU or
 platform counters must be recorded explicitly and must not fail CPU-only execution.
@@ -328,6 +331,17 @@ predictions; incomplete cells are rerun. Parent failures and logs remain immutab
 Protocol or code-state drift, missing prediction checkpoints, ledger disagreement or
 holdout-boundary ambiguity must reject resume. Holdout access remains forbidden until
 the derived attempt verifies and seals the complete family locks.
+
+Expanded-study HPO must also preserve controlled sensitivity evidence where the
+research question asks for marginal hyperparameter or architecture effects. The
+approved protocol must predeclare a selection-ineligible matched-contrast design
+generated from registered component search-space metadata. Each comparison identifies
+its reference, changed factor and levels, fields held constant, fidelity, folds, seeds
+and risk scenario. Proposed, completed and failed cells are all retained with partial-
+completion counts, exception diagnostics and available resource telemetry. Random or
+adaptive HPO associations must not be labelled as held-constant or causal effects.
+Sensitivity evidence may use declared reduced fidelity but cannot enter family locks
+or use the final holdout.
 
 For the expanded weekly RL selector, portfolio reward must use exact observed T+1
 execution and weekly endpoint prices. Intervening daily marks are not required by the
@@ -364,7 +378,7 @@ Metadata includes Git commit, timestamp, model, feature set, portfolio, label ho
 
 For supervised long-running execution, write operational logs to a separate
 versioned directory containing the exact child command, supervisor metadata,
-timestamped combined console output, structured events, periodic resource samples
+local-time human-readable console output, UTC-timestamped structured events, periodic resource samples
 and a terminal status/exit code. The monitoring directory is operational evidence,
 not a source of model metrics and not an input to model selection.
 

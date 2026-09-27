@@ -93,6 +93,28 @@ def test_console_filter_prints_status_but_not_complete_log(capsys):
     assert "Inner candidate started" in console
 
 
+def test_human_log_retains_one_local_timestamp_without_milliseconds_or_utc(capsys):
+    events = io.StringIO()
+    output = io.StringIO()
+    source = io.StringIO(
+        "2026-09-27 22:53:44,537 INFO Inner candidate started "
+        "fold=outer_1 arm=LSTM_F1_STACK trial=LSTM_F1_STACK-outer_1-002\n"
+    )
+
+    monitor._drain(source, "stderr", output, events, monitor.threading.Lock())
+
+    expected = (
+        "2026-09-27 22:53:44 INFO Inner candidate started "
+        "fold=outer_1 arm=LSTM_F1_STACK trial=LSTM_F1_STACK-outer_1-002\n"
+    )
+    assert output.getvalue() == expected
+    assert capsys.readouterr().out == expected
+    assert "+00:00" not in output.getvalue()
+    structured = json.loads(events.getvalue())
+    assert structured["timestamp_utc"].endswith("+00:00")
+    assert structured["message"].startswith("2026-09-27 22:53:44,537 INFO")
+
+
 def test_gpu_sampler_handles_missing_nvidia_smi(monkeypatch):
     def missing(*args, **kwargs):
         raise FileNotFoundError("nvidia-smi")

@@ -7,7 +7,7 @@
 
 The practical problem is to turn information available after market close on session T into a ranked list of roughly 100 US equities, then test a weekly long-only portfolio entered at the next session's close. The ML problem is supervised regression of the five-session forward adjusted-close return, evaluated both as a numerical forecast and, more importantly, as a cross-sectional ranking signal. The research question is whether market and point-in-time SEC features improve ranking and after-cost portfolio outcomes relative to simple baselines.
 
-This is a **layered local research application with application-service orchestration**. It is not a set of microservices. `trading_pipeline.run` is the authoritative application service: one process coordinates ingestion, validation, feature creation, splitting, training, frozen selection, evaluation, portfolio simulation and artefact persistence. Separate modules express research boundaries, not independently deployed services.
+This is a **layered local research application with application-service orchestration**. It is not a set of microservices. `trading_pipeline.run` is the authoritative application service: one process coordinates ingestion, validation, feature creation, splitting, training, frozen selection, evaluation, portfolio simulation and artefact persistence. `trading_pipeline.data.download` is an operator-facing ingestion-only entry point that loads a Slice 1 config and calls the same ingestion service; it does not create a research run. Separate modules express research boundaries, not independently deployed services.
 
 ## Training and deployment contracts
 

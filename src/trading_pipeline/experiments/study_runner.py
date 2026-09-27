@@ -7,6 +7,7 @@ It never reads a legacy run. Unsupported arms fail before any score-bearing data
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from copy import deepcopy
 import hashlib
 import json
 import logging
@@ -15,6 +16,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
+import traceback
 import uuid
 
 import numpy as np
@@ -34,7 +36,7 @@ from trading_pipeline.experiments.study_resume import (
     CheckpointStore, code_state_sha256, sha256, cell_key, process_still_running,
 )
 from trading_pipeline.features import F0, F1
-from trading_pipeline.optimisation.search import random_proposals
+from trading_pipeline.optimisation.search import controlled_one_factor_design, random_proposals
 from trading_pipeline.rl.study_integration import execute_study_rl_trial
 
 
@@ -256,7 +258,16 @@ def _score(rows: list[dict], predictions: np.ndarray) -> tuple[float, float]:
         actual, predicted = zip(*values)
         if len(values) < 2:
             raise ValueError("Daily cross-sectional IC requires at least two securities")
-        correlation = spearmanr(actual, predicted).statistic
+        actual_array = np.asarray(actual, dtype=np.float64)
+        predicted_array = np.asarray(predicted, dtype=np.float64)
+        # A constant cross-section contains no rank information. Treat its IC as
+        # neutral explicitly instead of asking scipy to emit ConstantInputWarning
+        # and return NaN. RMSE below still evaluates the predictions normally.
+        if (np.all(actual_array == actual_array[0])
+                or np.all(predicted_array == predicted_array[0])):
+            daily.append(0.0)
+            continue
+        correlation = spearmanr(actual_array, predicted_array).statistic
         daily.append(0.0 if not math.isfinite(correlation) else float(correlation))
     rmse = math.sqrt(sum((float(row["forward_return_5d"]) - float(pred)) ** 2
                          for row, pred in zip(rows, predictions, strict=True)) / len(rows))
@@ -492,6 +503,49 @@ def _rl_proposals(registry, arm: dict, config: dict) -> list[dict]:
     return proposals
 
 
+def _controlled_sensitivity_designs(registry, arms: list[dict], config: dict) -> dict[str, dict]:
+    declaration = config.get("search", {}).get("controlled_sensitivity")
+    if declaration is None:
+        return {}
+    required = {"enabled", "design", "inner_folds_per_outer", "selection_eligible",
+                "deep_training", "rl_training"}
+    if (not isinstance(declaration, dict) or not required <= declaration.keys()
+            or declaration["enabled"] is not True
+            or declaration["design"] != "deterministic_controlled_one_factor_v1"
+            or declaration["selection_eligible"] is not False):
+        raise ValueError("Controlled sensitivity must be enabled, score-blind and selection-ineligible")
+    folds = declaration["inner_folds_per_outer"]
+    deep = declaration["deep_training"]
+    rl = declaration["rl_training"]
+    if (type(folds) is not int or folds < 1
+            or type(deep.get("epochs")) is not int or deep["epochs"] < 1
+            or type(deep.get("patience")) is not int or deep["patience"] < 1
+            or type(rl.get("total_timesteps")) is not int or rl["total_timesteps"] < 1):
+        raise ValueError("Controlled sensitivity requires positive fold and fidelity declarations")
+    if (deep["epochs"] > config["search"]["deep_training"]["epochs"]
+            or rl["total_timesteps"] > config["search"]["rl_training"]["total_timesteps"]):
+        raise ValueError("Sensitivity fidelity cannot exceed selection fidelity")
+    designs = {}
+    for arm in arms:
+        component_id = arm["component_id"]
+        if arm["interface"] == "RLPolicy":
+            component = registry.create(component_id, total_timesteps=rl["total_timesteps"])
+
+            def validate(parameters, component_id=component_id):
+                registry.create(component_id, parameters=parameters,
+                                total_timesteps=rl["total_timesteps"])
+        else:
+            component = registry.create(component_id)
+
+            def validate(parameters, component_id=component_id):
+                registry.create(component_id, params=parameters)
+        design = controlled_one_factor_design(component.search_space()["parameters"], validate)
+        designs[arm["id"]] = {**design, "arm_id": arm["id"],
+                              "component_id": component_id,
+                              "selection_eligible": False}
+    return designs
+
+
 def _rl_inputs(root: Path, config: dict, feature_path: Path, feature_sha256: str):
     """Open only protocol-hashed bars and long-form causal model outputs."""
     contract = config["data"].get("rl_inputs")
@@ -561,7 +615,11 @@ def _rl_trial_cell(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
                    scenario: str, fit_dates: tuple[date, ...], score_dates: tuple[date, ...],
                    rows: list[dict], bars: pl.DataFrame, outputs: pl.DataFrame,
                    feature_sha256: str, outputs_sha256: str, fold_sha256: str,
-                   output: Path):
+                   output: Path, total_timesteps: int | None = None):
+    steps = (study.config["search"]["rl_training"]["total_timesteps"]
+             if total_timesteps is None else total_timesteps)
+    if type(steps) is not int or steps < 1:
+        raise ValueError("RL trial requires positive declared environment steps")
     available_dates = set(outputs["session_date"].unique().to_list())
     fit_dates = tuple(day for day in fit_dates if day in available_dates)
     score_dates = tuple(day for day in score_dates if day in available_dates)
@@ -591,10 +649,10 @@ def _rl_trial_cell(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
     result = execute_study_rl_trial(
         study=study, authority=authority, component_id=arm["component_id"],
         context=FitContext(authority.study_id, trial_id, fold_id, seed,
-                           {"environment_steps": study.config["search"]["rl_training"]["total_timesteps"]}),
+                           {"environment_steps": steps}),
         train_dataset=train.dataset, score_dataset=score.dataset,
         risk_scenario=scenario, parameters=params,
-        total_timesteps=study.config["search"]["rl_training"]["total_timesteps"],
+        total_timesteps=steps,
         output_dir=output,
     )
     primary = result.metrics["certainty_equivalent_mean"]
@@ -667,6 +725,190 @@ def _restore_rl_price_rows(output: Path, price_rows: dict[str, list[dict]]) -> N
             _append(output / name, row)
 
 
+def _sensitivity_terminal_failure(*, trial_id: str, proposal_index: int,
+                                  started: float, completed_cells: int,
+                                  expected_cells: int, active_cell: dict | None,
+                                  exc: Exception) -> dict:
+    return {
+        "trial_id": trial_id,
+        "proposal_index": proposal_index,
+        "status": "failed",
+        "selection_eligible": False,
+        "exception_type": type(exc).__name__,
+        "reason": f"{type(exc).__name__}: {exc}",
+        "diagnostic_traceback": traceback.format_exc(),
+        "failed_cell": active_cell,
+        "completed_cells": completed_cells,
+        "expected_cells": expected_cells,
+        "resource_seconds": time.perf_counter() - started,
+    }
+
+
+def _run_controlled_sensitivity(
+    *, study: ResolvedStudy, authority: VerifiedStudyAuthority, registry,
+    arms: list[dict], outer: list[dict], inner: dict[str, list[dict]],
+    designs: dict[str, dict], seeds: list[int], development_labels,
+    rows: list[dict], bars: pl.DataFrame | None, outputs: pl.DataFrame | None,
+    feature_sha256: str, outputs_sha256: str | None, fold_sha256: str,
+    output: Path, checkpoints: CheckpointStore, source: Path | None,
+) -> None:
+    """Collect selection-ineligible matched contrasts before holdout access."""
+    if not designs:
+        return
+    declaration = study.config["search"]["controlled_sensitivity"]
+    fold_count = declaration["inner_folds_per_outer"]
+    if any(len(inner[fold["fold_id"]]) < fold_count for fold in outer):
+        raise ValueError("Controlled sensitivity requests more inner folds than exist")
+    sensitivity_config = deepcopy(study.config)
+    sensitivity_config["search"]["deep_training"] = dict(declaration["deep_training"])
+    rl_steps = declaration["rl_training"]["total_timesteps"]
+    _write_new(output / "sensitivity_design.json", {
+        "schema_version": 1,
+        "study_id": authority.study_id,
+        "protocol_sha256": authority.protocol_sha256,
+        "selection_eligible": False,
+        "fold_policy": "first_declared_inner_folds_per_outer",
+        "inner_folds_per_outer": fold_count,
+        "seeds": seeds,
+        "deep_training": declaration["deep_training"],
+        "rl_training": declaration["rl_training"],
+        "arms": designs,
+    })
+    LOGGER.info("Controlled sensitivity started arms=%d folds_per_outer=%d",
+                len(arms), fold_count)
+    for outer_fold in outer:
+        outer_id = outer_fold["fold_id"]
+        sensitivity_folds = inner[outer_id][:fold_count]
+        for arm in arms:
+            arm_id = arm["id"]
+            design = designs[arm_id]
+            for proposal_index, params in enumerate(design["proposals"]):
+                scenarios = (_rl_scenarios(study.config)
+                             if arm["interface"] == "RLPolicy" else (None,))
+                for scenario in scenarios:
+                    scenario_token = f"-{scenario}" if scenario else ""
+                    trial_id = f"SENS-{arm_id}{scenario_token}-{outer_id}-{proposal_index + 1:03d}"
+                    proposal = {
+                        "trial_id": trial_id, "arm_id": arm_id,
+                        "component_id": arm["component_id"], "outer_fold_id": outer_id,
+                        "risk_scenario": scenario, "proposal_index": proposal_index,
+                        "status": "proposed", "selection_eligible": False,
+                        "parameters": params,
+                    }
+                    _append(output / "sensitivity_trial_ledger.jsonl", proposal)
+                    expected = len(sensitivity_folds) * len(seeds)
+                    completed = 0
+                    active_cell = None
+                    started = time.perf_counter()
+                    scores = []
+                    try:
+                        for part in sensitivity_folds:
+                            fit_dates, stop_dates, score_dates = (_dates(part, name) for name in
+                                ("fit_dates", "stopping_dates", "score_dates"))
+                            if arm["interface"] == "SupervisedModel":
+                                fit, stop, score = development_labels.partitions(
+                                    fit_dates, stop_dates, score_dates)
+                                if any(row["label_end_date"] >= stop_dates[0] for row in fit):
+                                    raise ValueError("Sensitivity fit label reaches stopping window")
+                                if any(row["label_end_date"] >= score_dates[0] for row in stop):
+                                    raise ValueError("Sensitivity stopping label reaches score window")
+                            for seed in seeds:
+                                active_cell = {"inner_fold_id": part["fold_id"], "seed": seed,
+                                               "risk_scenario": scenario}
+                                identity = {"trial_id": trial_id, **active_cell,
+                                            "parameters": params,
+                                            "selection_eligible": False}
+                                kind = ("supervised_sensitivity" if arm["interface"] == "SupervisedModel"
+                                        else "rl_sensitivity")
+                                prior_cell = checkpoints.get(kind, identity)
+                                if arm["interface"] == "SupervisedModel":
+                                    if prior_cell is None:
+                                        _, ic, rmse, telemetry, _ = _fit_score(
+                                            registry, arm, params, seed, trial_id, part["fold_id"],
+                                            fit, stop, score, config=sensitivity_config,
+                                            feature_pool=rows)
+                                        record = {**active_cell, "trial_id": trial_id,
+                                                  "outer_fold_id": outer_id,
+                                                  "proposal_index": proposal_index,
+                                                  "status": "complete", "ic": ic, "rmse": rmse,
+                                                  "telemetry": telemetry,
+                                                  "selection_eligible": False}
+                                    else:
+                                        record = prior_cell["record"]
+                                    checkpoints.save(kind, identity, record,
+                                                     reused_from=source.name if prior_cell else None)
+                                else:
+                                    if prior_cell is None:
+                                        result = _rl_trial_cell(
+                                            study=study, authority=authority, arm=arm, params=params,
+                                            seed=seed, trial_id=trial_id, fold_id=part["fold_id"],
+                                            scenario=scenario, fit_dates=fit_dates,
+                                            score_dates=score_dates, rows=rows, bars=bars,
+                                            outputs=outputs, feature_sha256=feature_sha256,
+                                            outputs_sha256=outputs_sha256, fold_sha256=fold_sha256,
+                                            output=output, total_timesteps=rl_steps)
+                                        record = {**active_cell, "trial_id": trial_id,
+                                                  "outer_fold_id": outer_id,
+                                                  "proposal_index": proposal_index,
+                                                  "status": "complete",
+                                                  "certainty_equivalent_mean":
+                                                      result["certainty_equivalent_mean"],
+                                                  "metrics": result["metrics"],
+                                                  "telemetry": result["telemetry"],
+                                                  "selection_eligible": False}
+                                        complete_row, resource, paths = _rl_checkpoint_rows(
+                                            output, trial_id, part["fold_id"], seed, scenario)
+                                        price_rows = _rl_price_rows(
+                                            output, trial_id, part["fold_id"], seed, scenario)
+                                    else:
+                                        record = prior_cell["record"]["fit"]
+                                        complete_row = prior_cell["record"]["rl_complete"]
+                                        resource = prior_cell["record"]["rl_resource"]
+                                        price_rows = prior_cell["record"].get("rl_price", {})
+                                        paths = tuple(checkpoints.copy_artefact(prior_cell, relative)
+                                                      for relative in prior_cell["artefact_sha256"])
+                                        _append(output / "rl_trial_ledger.jsonl", complete_row)
+                                        _append(output / "rl_resource_ledger.jsonl", resource)
+                                        _restore_rl_price_rows(output, price_rows)
+                                    checkpoints.save(kind, identity,
+                                        {"fit": record, "rl_complete": complete_row,
+                                         "rl_resource": resource, "rl_price": price_rows}, paths,
+                                        reused_from=source.name if prior_cell else None)
+                                _append(output / "sensitivity_fit_ledger.jsonl", record)
+                                scores.append(record)
+                                completed += 1
+                        terminal = {
+                            "trial_id": trial_id, "proposal_index": proposal_index,
+                            "status": "complete", "selection_eligible": False,
+                            "completed_cells": completed, "expected_cells": expected,
+                            "resource_seconds": time.perf_counter() - started,
+                        }
+                        if arm["interface"] == "SupervisedModel":
+                            terminal.update(
+                                mean_ic=sum(item["ic"] for item in scores) / expected,
+                                mean_rmse=sum(item["rmse"] for item in scores) / expected)
+                        else:
+                            terminal["mean_certainty_equivalent"] = sum(
+                                item["certainty_equivalent_mean"] for item in scores) / expected
+                        _append(output / "sensitivity_trial_ledger.jsonl", terminal)
+                    except Exception as exc:
+                        if active_cell is not None:
+                            _append(output / "sensitivity_fit_ledger.jsonl", {
+                                **active_cell, "trial_id": trial_id,
+                                "outer_fold_id": outer_id, "proposal_index": proposal_index,
+                                "status": "failed", "selection_eligible": False,
+                                "exception_type": type(exc).__name__,
+                                "reason": f"{type(exc).__name__}: {exc}"})
+                        terminal = _sensitivity_terminal_failure(
+                            trial_id=trial_id, proposal_index=proposal_index,
+                            started=started, completed_cells=completed,
+                            expected_cells=expected, active_cell=active_cell, exc=exc)
+                        _append(output / "sensitivity_trial_ledger.jsonl", terminal)
+                        LOGGER.warning("Controlled sensitivity failed arm=%s trial=%s error=%s: %s",
+                                       arm_id, trial_id, type(exc).__name__, exc)
+    LOGGER.info("Controlled sensitivity completed")
+
+
 def _run_rl_outer(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
                   arm: dict, outer_fold: dict, inner: list[dict], proposals: list[dict],
                   seeds: list[int], rows: list[dict], bars: pl.DataFrame,
@@ -683,11 +925,16 @@ def _run_rl_outer(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
                 "outer_fold_id": outer_id, "proposal_index": index,
                 "status": "proposed", "parameters": params})
             evidence = []
+            expected = len(inner) * len(seeds)
+            active_cell = None
+            trial_started = time.perf_counter()
             try:
                 for fold in inner:
                     fit_dates, score_dates = (_dates(fold, name) for name in
                                                ("fit_dates", "score_dates"))
                     for seed in seeds:
+                        active_cell = {"inner_fold_id": fold["fold_id"], "seed": seed,
+                                       "risk_scenario": scenario}
                         identity = {"trial_id": trial_id, "fold_id": fold["fold_id"],
                                     "seed": seed, "scenario": scenario, "parameters": params}
                         prior_cell = checkpoints.get("rl_inner", identity)
@@ -724,7 +971,7 @@ def _run_rl_outer(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
                                          reused_from=source.name if prior_cell else None)
                         _append(output / "fit_ledger.jsonl", record)
                         evidence.append(record)
-                expected = len(inner) * len(seeds)
+                        active_cell = None
                 if len(evidence) != expected:
                     raise ValueError("Incomplete RL inner fold/seed matrix")
                 mean = sum(item["certainty_equivalent_mean"] for item in evidence) / expected
@@ -735,8 +982,19 @@ def _run_rl_outer(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
                         "status": "complete", "mean_certainty_equivalent": mean,
                         "resource_seconds": duration})
             except Exception as exc:
+                if active_cell is not None:
+                    _append(output / "fit_ledger.jsonl", {
+                        "trial_id": trial_id, "arm_id": arm["id"],
+                        "outer_fold_id": outer_id, **active_cell, "status": "failed",
+                        "exception_type": type(exc).__name__,
+                        "reason": f"{type(exc).__name__}: {exc}"})
                 _append(output / "trial_ledger.jsonl", {"trial_id": trial_id,
-                        "status": "failed", "reason": f"{type(exc).__name__}: {exc}"})
+                        "status": "failed", "reason": f"{type(exc).__name__}: {exc}",
+                        "exception_type": type(exc).__name__,
+                        "diagnostic_traceback": traceback.format_exc(),
+                        "failed_cell": active_cell,
+                        "completed_cells": len(evidence), "expected_cells": expected,
+                        "resource_seconds": time.perf_counter() - trial_started})
         selected = _rl_select(candidates, tolerance)
         lock = output / "locks" / f"{arm['id']}-{scenario}-{outer_id}.json"
         _write_new(lock, {"study_id": authority.study_id, "arm_id": arm["id"],
@@ -798,6 +1056,7 @@ def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, reposi
                     else _rl_proposals(registry, arm, config))
         for arm in arms
     }
+    sensitivity_designs = _controlled_sensitivity_designs(registry, arms, config)
     required = {"session_date", "security_id", "ticker", "label_end_date", "forward_return_5d", *F1}
     schema = pl.read_parquet_schema(feature_path)
     if not required <= set(schema):
@@ -891,6 +1150,16 @@ def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, reposi
     tolerance = float(config["selection"]["practical_equivalence_tolerance"])
     predictions_out = []
     try:
+        _run_controlled_sensitivity(
+            study=study, authority=authority, registry=registry, arms=arms,
+            outer=outer, inner=inner, designs=sensitivity_designs, seeds=seeds,
+            development_labels=development_labels, rows=rows, bars=bars,
+            outputs=rl_outputs, feature_sha256=snapshot["feature_sha256"],
+            outputs_sha256=rl_outputs_sha256,
+            fold_sha256=authority.input_sha256[
+                config["validation"]["inner_windows_manifest"]],
+            output=output, checkpoints=checkpoints, source=source,
+        )
         for outer_fold in outer:
             outer_id = outer_fold["fold_id"]
             LOGGER.info("Outer fold started fold=%s", outer_id)
@@ -907,6 +1176,9 @@ def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, reposi
                             "outer_fold_id": outer_id, "proposal_index": index, "status": "proposed",
                             "parameters": params})
                     trial_evidence = []
+                    expected = len(inner[outer_id]) * len(seeds)
+                    active_cell = None
+                    trial_started = time.perf_counter()
                     try:
                         for part in inner[outer_id]:
                             fit_dates, stop_dates, score_dates = (_dates(part, name) for name in
@@ -918,6 +1190,7 @@ def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, reposi
                             if any(row["label_end_date"] >= score_dates[0] for row in stop):
                                 raise ValueError("Stopping label reaches score window")
                             for seed in seeds:
+                                active_cell = {"inner_fold_id": part["fold_id"], "seed": seed}
                                 identity = {"trial_id": trial_id, "inner_fold_id": part["fold_id"],
                                             "seed": seed, "parameters": params}
                                 prior_cell = checkpoints.get("supervised_inner", identity)
@@ -934,7 +1207,7 @@ def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, reposi
                                                  reused_from=source.name if prior_cell else None)
                                 _append(output / "fit_ledger.jsonl", evidence)
                                 trial_evidence.append(evidence)
-                        expected = len(inner[outer_id]) * len(seeds)
+                                active_cell = None
                         if len(trial_evidence) != expected:
                             raise ValueError("Incomplete inner fold/seed matrix")
                         mean_ic = sum(item["ic"] for item in trial_evidence) / expected
@@ -947,8 +1220,20 @@ def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, reposi
                         LOGGER.info("Inner candidate completed fold=%s arm=%s trial=%s",
                                     outer_id, arm_id, trial_id)
                     except Exception as exc:
+                        if active_cell is not None:
+                            _append(output / "fit_ledger.jsonl", {
+                                "trial_id": trial_id, "arm_id": arm_id,
+                                "outer_fold_id": outer_id, **active_cell, "status": "failed",
+                                "exception_type": type(exc).__name__,
+                                "reason": f"{type(exc).__name__}: {exc}"})
                         _append(output / "trial_ledger.jsonl", {"trial_id": trial_id,
-                                "status": "failed", "reason": f"{type(exc).__name__}: {exc}"})
+                                "status": "failed", "reason": f"{type(exc).__name__}: {exc}",
+                                "exception_type": type(exc).__name__,
+                                "diagnostic_traceback": traceback.format_exc(),
+                                "failed_cell": active_cell,
+                                "completed_cells": len(trial_evidence),
+                                "expected_cells": expected,
+                                "resource_seconds": time.perf_counter() - trial_started})
                         LOGGER.warning("Inner candidate failed fold=%s arm=%s trial=%s error=%s: %s",
                                        outer_id, arm_id, trial_id, type(exc).__name__, exc)
                 if not candidates:

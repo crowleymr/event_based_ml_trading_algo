@@ -80,7 +80,31 @@ an acceptance gate changes; generated artefacts and tests remain the evidence au
   (`71e2126ac30cd500773a1ff590c59a5987ac44fc5652a88b64039828541b86f0`);
   all seven arms, two outer folds, two inner folds, one seed and three RL risk scenarios
   remain mandatory. Partial-family approval remains impossible.
-- [ ] Execute the deadline-feasible inner-HPO and outer-evaluation matrix; seal family locks before holdout access. The deadline-tier approved-v2 attempt failed before a complete RL candidate and before holdout access. Its completed supervised evidence is historical only because it predates the resume contract. Revised prepared-v8 binds point-in-time observed-history eligibility and exact weekly endpoint valuation; fresh capability evidence and approved-v3 remain required before relaunch.
+- [x] Freeze the RL method correction in prepared-v8/protocol-v9 and complete a fresh
+  score-blind gate: all seven production-shaped arms passed at 1,112,000 fit rows,
+  224 tests passed, the six-hour calibration selected the complete deadline tier at
+  6,625 seconds, and approved-v3 was authority-verified at protocol SHA-256
+  `d0d4c9c0454924a342839d5c88ae67bd338003cc88f4e2155bb1886d4189e4b5`.
+- [ ] Execute the deadline-feasible inner-HPO and outer-evaluation matrix; seal family locks before holdout access. The deadline-tier approved-v2 attempt failed before a complete RL candidate and before holdout access. Its completed supervised evidence is historical only because it predates the resume contract. Approved-v3 binds point-in-time observed-history eligibility, exact weekly endpoint valuation and immutable per-cell continuation.
+  The first approved-v3 attempt `20260927T123550Z-a6e5c43f` was operator-stopped in
+  outer fold 1 to replace SciPy's constant-input warning with an explicit, numerically
+  identical neutral-IC guard. It did not open holdout and is not resumable after the
+  source change. The post-fix full suite passes 226 tests; relaunch must be fresh.
+- [x] Stop approved-v3 attempt `20260927T124032Z-bff62712` before family locks or
+  holdout access after identifying that its two simultaneous-random candidates per
+  family preserve parameters but cannot answer controlled marginal-effect questions.
+  The supervisor recorded the terminal failure and partial artefacts remain immutable.
+- [x] Add protocol-declared, selection-ineligible controlled sensitivity collection:
+  one reference plus one valid single-factor contrast for every registered search
+  dimension, conditional matched references, one inner fold per outer fold, seed 41,
+  two deep epochs and 1,000 RL steps. Complete and failed cells retain comparison,
+  fidelity, exception, traceback, partial-completion and telemetry evidence.
+- [x] Freeze prepared-v9 and approval amendment v4. Score-blind calibration covers
+  56 unique sensitivity configurations and estimates 4,305 seconds for sensitivity
+  plus 6,625 seconds for the existing deadline HPO matrix (10,930 seconds total before
+  final fits/reporting), retaining the six-hour gate. The fresh full suite passed
+  235 tests with one platform skip; approved-v4 is authority-verified at protocol
+  SHA-256 `2b6095fbd48cb93a99e270292292dca1ceaf60b3c4c288f6e714339a66532678`.
 - [ ] Execute the descriptive holdout once, followed by the unified T+1/cost-reconciled model × risk test bench.
 - [ ] Generate supervised model-conditioned frontiers and all-model realised risk-return curves.
 - [x] Implement the WP7 report/dashboard/notebook consumers. Both report generation and
@@ -94,6 +118,10 @@ an acceptance gate changes; generated artefacts and tests remain the evidence au
   research behaviour; persist stdout/stderr, lifecycle/warning/error events and terminal
   status; sample process-tree RSS, RAM, CPU load/utilisation, GPU utilisation and VRAM;
   degrade explicitly on CPU-only systems; and retain logs after interruption/failure.
+- [x] Normalise operator-facing supervisor output to a single local timestamp at
+  whole-second precision. Human-readable stdout/stderr and concise terminal status no
+  longer contain a duplicate GMT prefix; structured JSONL retains UTC for machine
+  correlation. Exact-format regression coverage passes.
 - [x] Add a fail-closed authoritative resume facility before the next launch. Resume
   must create an immutable derived attempt with explicit parent lineage; bind the exact
   approved protocol, inputs and code state; reuse only hash-verified complete cells and
@@ -104,27 +132,35 @@ an acceptance gate changes; generated artefacts and tests remain the evidence au
   supervisor equivalent now create a new lineage-linked run, verify every source
   checkpoint/artefact before reuse, persist per-cell predictions, reject protocol/input/
   code drift, and retain the source unchanged. Focused resume/RL/authority verification
-  passed; the full replacement capability gate is still pending.
+  and the full replacement capability gate passed.
 - [ ] Generate WP7 report tables from the completed authoritative run, execute the final
-  notebook, and run the WP9 audit/completeness checks.
+  notebook, and run the WP9 audit/completeness checks. Extend the read-only report and
+  dashboard at that stage with controlled marginal-effect and candidate-failure views
+  sourced from `sensitivity_design.json`, `sensitivity_trial_ledger.jsonl`,
+  `sensitivity_fit_ledger.jsonl`, `trial_ledger.jsonl` and `fit_ledger.jsonl`; do not
+  alter or recompute the raw run evidence.
 - [ ] Freeze and commit the exact code revision, run/report IDs, hashes and operator manual.
 
-Remaining critical-path order: complete resume/checkpoint support and the revised RL
-price-eligibility protocol/gate; launch the newly approved protocol through the supervisor;
-run inner HPO and outer evaluation with family locks; open the descriptive holdout once; then
-generate the report, execute the notebook and complete the final audit/freeze.
+Remaining critical-path order: launch approved-v4 through the supervisor; run controlled
+sensitivity, inner HPO
+and outer evaluation with family locks; open the descriptive holdout once; then generate
+the report, execute the notebook and complete the final audit/freeze. If that new run
+fails after a verified cell, continue it only through a new `--resume-from` attempt.
 
 Real-data causal OOF materialisation is complete (46 chronological windows, with protected
 labels excluded from fitting). Deep and RL bridge results remain engineering/capability
 evidence only. No completed expanded HPO/outer-evaluation or holdout result exists. Prepared
-Approved protocol v2 cleared its representative smoke, calibration and capability gate,
-then failed as recorded above. Holdout access remains closed. Prepared-v7 is a newly
-self-hashed draft over unchanged canonical data/window/benchmark/causal-stack sources and
-the documented RL method correction; it cannot execute until fresh capability evidence
-produces a separately approved v3 protocol.
+protocol v2 cleared its representative smoke, calibration and capability gate,
+then failed as recorded above. Holdout access remains closed. Approved-v4 now supersedes
+v3 after its fresh verification gate; it retains the unchanged canonical
+data/window/benchmark/causal-stack sources and adds the separately approved controlled-
+sensitivity evidence contract. The transient prepared-v7/protocol-v8 staging pair is not an
+execution authority and was superseded before capability evidence was accepted.
 
-The immutable research approval record is separate from this live checklist at
-`docs/planning/EXPANDED_STUDY_APPROVAL.md`, so operational updates cannot invalidate
+The immutable v2 and v3 research approval records are separate from this live checklist
+at `docs/planning/EXPANDED_STUDY_APPROVAL.md` and
+`docs/planning/EXPANDED_STUDY_APPROVAL_V3.md` and
+`docs/planning/EXPANDED_STUDY_APPROVAL_V4.md`, so operational updates cannot invalidate
 a frozen protocol. Data artefacts and feature columns are manifest-driven. Trusted
 model-package discovery and YAML-driven arm membership now remove the Python roster;
 the central runner now routes from trusted component capability metadata rather than a
@@ -456,6 +492,11 @@ Add generated tables:
 - `pipeline_security_summary`;
 - `architecture_trial_summary`;
 - `hpo_trial_summary`;
+- `controlled_sensitivity_summary`, with matched reference/contrast levels, paired
+  deltas, fidelity and fold/seed/scenario coverage;
+- `candidate_failure_summary`, retaining failed/pruned candidate parameters, failed
+  cell/stage, completed/expected cells, runtime, exception category and diagnostic
+  source reference;
 - `training_trace` and `training_summary` for every family;
 - `risk_scenario_summary`;
 - `model_conditioned_frontier_points` and per-date frontier portfolio weights;
@@ -470,12 +511,19 @@ Required dashboard views:
 3. **Security drill-down:** date spans, missingness, feature/prediction history, selections, trades, gross return, costs and net contribution.
 4. **Architecture selection:** sortable lowest-to-highest/higher-is-better leaderboard, parameter count, runtime and fold/seed dispersion.
 5. **HPO:** all trials including failed/pruned, filters by family/features/risk/fold and selected-trial trace.
-6. **Training:** loss/score curves, stopping point, device/resource use and availability labels when a curve is not applicable.
-7. **Risk scenarios:** conservative/balanced/aggressive metric matrix and Pareto plots.
-8. **Model-conditioned frontiers:** one selectable frontier per eligible supervised model and rebalance date, with shared estimator/constraint metadata and the three risk-scenario locations highlighted. Clearly mark infeasible points and exclude DQN/PPO from the classical-frontier claim.
-9. **Realised risk–return curves:** one curve per model, including DQN/PPO, connecting the three risk scenarios only where the declared risk control is monotonic; show dominated/non-monotonic outcomes and supporting risk/cost/dispersion metrics.
-10. **Final test bench:** aligned equity curves for every compatible finalist and B0, plus return, risk, drawdown, turnover, cost and benchmark-relative metrics.
-11. **Limitations/questions:** unresolved judgement, data and confirmation constraints.
+   Present success and failure as separate evidence: performance rankings must not
+   assign artificial scores to failures, while failure rates, recurring causes,
+   time-to-failure and partial coverage remain visible.
+6. **Controlled sensitivity:** select a model and factor; show only verified matched
+   reference/contrast groups, paired metric/resource deltas and failure-probability
+   changes. Label reduced-fidelity local effects explicitly and mark unsupported
+   global or interaction claims as not identifiable.
+7. **Training:** loss/score curves, stopping point, device/resource use and availability labels when a curve is not applicable.
+8. **Risk scenarios:** conservative/balanced/aggressive metric matrix and Pareto plots.
+9. **Model-conditioned frontiers:** one selectable frontier per eligible supervised model and rebalance date, with shared estimator/constraint metadata and the three risk-scenario locations highlighted. Clearly mark infeasible points and exclude DQN/PPO from the classical-frontier claim.
+10. **Realised risk–return curves:** one curve per model, including DQN/PPO, connecting the three risk scenarios only where the declared risk control is monotonic; show dominated/non-monotonic outcomes and supporting risk/cost/dispersion metrics.
+11. **Final test bench:** aligned equity curves for every compatible finalist and B0, plus return, risk, drawdown, turnover, cost and benchmark-relative metrics.
+12. **Limitations/questions:** unresolved judgement, data and confirmation constraints.
 
 Accept when aggregate pipeline counts reconcile to security rows; contributions reconcile to portfolio returns; incompatible protocols cannot be pooled; ticker filters work; every supervised frontier uses the same declared covariance/constraint contract; realised curves use aligned dates and conventions; classical and realised terminology is never conflated; output checksums are verified; and source runs remain byte-identical.
 

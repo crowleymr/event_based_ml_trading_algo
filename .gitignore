@@ -25,9 +25,18 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-pytest*
-.pytest*
-tmp*
+
+# Repository-local disposable workspace. All new test/tool scratch belongs here;
+# see docs/operations/TEMPORARY_WORKSPACE.md.
+/.tmp/
+
+# Legacy root-level scratch patterns retained only for one-time audited cleanup.
+# Do not create new folders matching these patterns.
+/pytest*/
+/.pytest*/
+/tmp*/
+/.streamlit-skills-*/
+/rl-price-eligibility-pytest/
 
 # PyInstaller
 #   Usually these files are written by a python script from a template
@@ -211,7 +220,6 @@ tempCodeRunnerFile.py
 /runs/
 /reports/
 .sec-user-agent
-pytest-cache-files-*/
 
 # Ruff stuff:
 .ruff_cache/

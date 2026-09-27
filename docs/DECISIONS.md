@@ -154,3 +154,18 @@ A whole-future-panel completeness screen is prohibited as lookahead. The change 
 a pre-RL-result method correction, not outcome-based selection, and requires new
 prepared, capability and approved artefacts while preserving approved v2 and its
 failed attempt unchanged.
+
+2026-09-27 controlled-sensitivity amendment: the approved-v3 replacement attempt
+was stopped during its first LSTM outer-fold work, before family locks or holdout
+access, when review established that two deterministic-random candidates per family
+could not identify the requested “all else held constant” hyperparameter and
+architecture effects. Complete parameter vectors alone are insufficient when many
+dimensions change together. The replacement protocol therefore adds a separate,
+selection-ineligible deterministic one-factor screen generated from each registered
+component's declarative search space. It records one reference and one valid contrast
+per active dimension, conditional matched references, complete and failed cells, and
+explicit comparison metadata. It uses one inner fold per outer fold, seed 41, two
+epochs for deep models and 1,000 steps for RL; the original two-candidate full-fidelity
+HPO remains the only selection input. These are local reduced-fidelity descriptive
+effects, not global causal claims. The score-blind runtime gate includes both matrices,
+and the sealed holdout remains forbidden for sensitivity or selection.

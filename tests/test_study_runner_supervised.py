@@ -4,6 +4,7 @@ from datetime import date
 import hashlib
 import json
 from types import SimpleNamespace
+import warnings
 
 import numpy as np
 import polars as pl
@@ -13,6 +14,23 @@ from trading_pipeline.experiments.default_registry import default_registry
 from trading_pipeline.experiments import ComponentSpec
 from trading_pipeline.experiments import study_runner as runner
 from trading_pipeline.features import F1
+
+
+@pytest.mark.parametrize(
+    ("actual", "predicted"),
+    [([0.1, 0.2, 0.3], [1.0, 1.0, 1.0]),
+     ([0.2, 0.2, 0.2], [1.0, 2.0, 3.0])],
+)
+def test_score_treats_constant_cross_section_as_neutral_without_warning(
+        actual, predicted):
+    rows = [{"session_date": date(2026, 1, 5), "forward_return_5d": value}
+            for value in actual]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        ic, rmse = runner._score(rows, np.asarray(predicted, dtype=np.float64))
+    assert ic == 0.0
+    assert rmse == pytest.approx(np.sqrt(np.mean(
+        (np.asarray(actual) - np.asarray(predicted)) ** 2)))
 
 
 def _config():

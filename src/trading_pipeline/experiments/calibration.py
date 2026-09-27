@@ -17,6 +17,7 @@ from typing import Any, Mapping, Sequence
 from .schema import load_study
 from .default_registry import default_registry
 from .budget_tiers import TIERS
+from trading_pipeline.optimisation.search import controlled_one_factor_design
 
 
 FORBIDDEN_OUTCOME_KEYS = {
@@ -87,6 +88,49 @@ def write_score_blind_calibration(
     seeds = len(study.config["reproducibility"]["seeds"])
     estimates: dict[str, float] = {}
     registry = default_registry()
+    sensitivity_seconds = 0.0
+    sensitivity = study.config["search"].get("controlled_sensitivity")
+    sensitivity_counts: dict[str, int] = {}
+    if sensitivity is not None:
+        if (not isinstance(sensitivity, Mapping)
+                or sensitivity.get("enabled") is not True
+                or sensitivity.get("selection_eligible") is not False
+                or sensitivity.get("design") != "deterministic_controlled_one_factor_v1"):
+            raise ValueError("Invalid controlled-sensitivity calibration declaration")
+        sensitivity_folds = sensitivity.get("inner_folds_per_outer")
+        if type(sensitivity_folds) is not int or not 0 < sensitivity_folds <= inner:
+            raise ValueError("Sensitivity fold count must fit the declared inner matrix")
+        for arm_id, arm in arms.items():
+            spec = registry.spec(arm["component_id"])
+            if spec.interface == "RLPolicy":
+                full_fidelity = study.config["search"]["rl_training"]["total_timesteps"]
+                sensitivity_fidelity = sensitivity["rl_training"]["total_timesteps"]
+                component = registry.create(arm["component_id"],
+                                            total_timesteps=sensitivity_fidelity)
+                validate = lambda parameters, component_id=arm["component_id"]: registry.create(
+                    component_id, parameters=parameters,
+                    total_timesteps=sensitivity_fidelity)
+                scenario_factor = 3
+            else:
+                component = registry.create(arm["component_id"])
+                validate = lambda parameters, component_id=arm["component_id"]: registry.create(
+                    component_id, params=parameters)
+                scenario_factor = 1
+                if spec.capabilities.get("sequence_view"):
+                    full_fidelity = study.config["search"]["deep_training"]["epochs"]
+                    sensitivity_fidelity = sensitivity["deep_training"]["epochs"]
+                else:
+                    full_fidelity = sensitivity_fidelity = 1
+            if (type(full_fidelity) is not int or type(sensitivity_fidelity) is not int
+                    or not 0 < sensitivity_fidelity <= full_fidelity):
+                raise ValueError("Sensitivity fidelity must be positive and no greater than HPO fidelity")
+            design = controlled_one_factor_design(
+                component.search_space()["parameters"], validate)
+            proposal_count = len(design["proposals"])
+            sensitivity_counts[arm_id] = proposal_count
+            cells = proposal_count * outer * sensitivity_folds * seeds * scenario_factor
+            fidelity_ratio = sensitivity_fidelity / full_fidelity
+            sensitivity_seconds += float(by_arm[arm_id]["wall_seconds"]) * cells * fidelity_ratio
     for tier, (classical_budget, deep_budget, rl_budget) in TIERS.items():
         total = 0.0
         for arm_id, arm in arms.items():
@@ -102,7 +146,7 @@ def write_score_blind_calibration(
             else:
                 raise ValueError(f"No score-bearing calibration interface: {arm_id}")
             total += float(by_arm[arm_id]["wall_seconds"]) * cells
-        estimates[tier] = total
+        estimates[tier] = total + sensitivity_seconds
     selected = next((tier for tier in TIERS if estimates[tier] <= deadline_seconds), None)
     if selected is None:
         raise RuntimeError("No complete declared budget tier fits the score-blind deadline")
@@ -116,8 +160,10 @@ def write_score_blind_calibration(
         "deadline_seconds": float(deadline_seconds),
         "budget_tier": selected,
         "estimated_seconds_by_tier": estimates,
+        "controlled_sensitivity_estimated_seconds": sensitivity_seconds,
+        "controlled_sensitivity_proposals_by_arm": sensitivity_counts,
         "estimation_policy": {
-            "formula": "sum_per_arm_timed_cell_seconds_x_tier_proposals_x_outer_folds_x_inner_folds_x_seeds_x_rl_scenarios",
+            "formula": "selection_matrix_plus_controlled_sensitivity_matrix_with_declared_fidelity_ratio",
             "timing_source": "caller_supplied_score_blind_per_arm_records",
             "timing_scope_requirement": "full_vintage_fit_shape_representative_of_declared_windows",
             "shape_extrapolation": "none; smaller-universe bridge-smoke timings are insufficient for a full-vintage deadline estimate",

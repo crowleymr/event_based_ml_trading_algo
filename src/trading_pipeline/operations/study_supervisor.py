@@ -20,6 +20,11 @@ def _utc() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _local_timestamp() -> str:
+    """Return the operator-facing local timestamp at whole-second precision."""
+    return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+
+
 def _record(handle, event: str, **fields: object) -> None:
     handle.write(json.dumps({"timestamp_utc": _utc(), "event": event, **fields},
                             sort_keys=True, allow_nan=False) + "\n")
@@ -117,19 +122,31 @@ _STATUS = re.compile(
     r"RL arm|Family locks|Descriptive(?: RL)? holdout)\b",
     re.IGNORECASE,
 )
+_CHILD_TIMESTAMP = re.compile(
+    r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
+    r"(?:[,.]\d+)?(?P<message>\s+.*)?$"
+)
+
+
+def _operator_log_line(message: str) -> str:
+    """Use a child's local timestamp once, without sub-second noise or UTC prefix."""
+    match = _CHILD_TIMESTAMP.match(message)
+    if match:
+        return f"{match.group('timestamp')}{match.group('message') or ''}"
+    return f"{_local_timestamp()} {message}"
 
 
 def _drain(stream, name: str, output, events, lock: threading.Lock) -> None:
     for line in iter(stream.readline, ""):
-        stamp = _utc()
         message = line.rstrip()
-        output.write(f"{stamp} {message}\n")
+        operator_line = _operator_log_line(message)
+        output.write(f"{operator_line}\n")
         output.flush()
         severity = "error" if _ERROR.search(message) else "warning" if _WARNING.search(message) else "info"
         with lock:
             _record(events, severity, source=name, message=message[:4000])
             if severity in {"warning", "error"} or _STATUS.search(message):
-                print(f"[{stamp}] {severity.upper():7} {message}", flush=True)
+                print(operator_line, flush=True)
     stream.close()
 
 
@@ -155,14 +172,14 @@ def supervise(study: Path, log_dir: Path, *, interval_seconds: float = 10.0,
         _record(events, "starting", command=command, study=str(study.resolve()),
                 resume_from=str(resume_from.resolve()) if resume_from is not None else None,
                 pid=os.getpid(), interval_seconds=interval_seconds)
-        print(f"[{_utc()}] STATUS  Starting supervised study process", flush=True)
+        print(f"{_local_timestamp()} STATUS Starting supervised study process", flush=True)
         process = None
         interrupted = False
         try:
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        text=True, encoding="utf-8", errors="replace", bufsize=1)
             _record(events, "running", child_pid=process.pid)
-            print(f"[{_utc()}] STATUS  Study process running (PID {process.pid})", flush=True)
+            print(f"{_local_timestamp()} STATUS Study process running (PID {process.pid})", flush=True)
             readers = [threading.Thread(target=_drain, args=(process.stdout, "stdout", stdout, events, lock),
                                         daemon=True),
                        threading.Thread(target=_drain, args=(process.stderr, "stderr", stderr, events, lock),
@@ -216,7 +233,7 @@ def supervise(study: Path, log_dir: Path, *, interval_seconds: float = 10.0,
         _record(events, "finished" if code == 0 else "failed", exit_code=code,
                 elapsed_seconds=round(time.monotonic() - start, 3), child_pid=process.pid)
         state = "completed" if code == 0 else "failed"
-        print(f"[{_utc()}] STATUS  Study {state} (exit code {code})", flush=True)
+        print(f"{_local_timestamp()} STATUS Study {state} (exit code {code})", flush=True)
         return code
 
 

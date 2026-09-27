@@ -1,5 +1,31 @@
 # Implementation log
 
+## 2026-09-27 — Safe temporary workspace cleanup
+
+- Added a repository-derived cleanup command for disposable `.tmp/` contents. Its
+  default mode only lists children; `--purge` validates repository and `.tmp` paths,
+  removes only immediate `.tmp` children and retains the `.tmp/` directory.
+- Updated the temporary-workspace guide and README with the required layout and
+  review-then-purge workflow. Existing legacy scratch directories were not removed.
+- Added focused tests for listing/purge boundaries, preserved `runs/` data, symlinked
+  `.tmp` refusal and non-repository refusal.
+- Verification: cleanup CLI inspection and `git diff --check` passed. The focused
+  pytest run could not complete because Windows denied access to its designated
+  `.tmp/pytest/temporary-cleanup-check` base directory, including pytest's session
+  cleanup; application assertions did not run. That scratch directory was left intact
+  and no purge was run.
+
+## 2026-09-27 — Add dedicated Slice 1 data-download command
+
+- Added `python -m trading_pipeline.data.download [--config ...]` as a clear
+  ingestion-only operator command. It defaults to `configs/poc.yaml` and delegates
+  to the existing config loader and ingestion service; `trading_pipeline.run` remains
+  the authoritative training and backtest execution path.
+- Updated the README and architecture description. The older `--ingest-only` route
+  remains supported for compatibility.
+- Verification: `.venv\\Scripts\\python.exe -m pytest -q -p no:cacheprovider
+  tests/test_data_download_cli.py tests/test_run_entrypoints.py` passed (5 tests).
+
 ## 2026-09-26 — Registered deep/PPO fold execution bridge (WP3/WP4)
 
 - Added `optimisation.model_execution.fit_predict_supervised` for evaluator-owned,
@@ -1045,5 +1071,101 @@ per-signal counts, missing dates and reasons. A future-panel completeness screen
 rejected as lookahead. Twenty-nine focused RL/authority tests passed. The approval
 record and decision log document that no complete RL candidate or holdout result
 informed the correction. Prepared-v8/protocol-v9 were generated immutably over the
-unchanged canonical vintage; fresh score-blind capability evidence and approved-v3
-remain required before relaunch.
+unchanged canonical vintage; the fresh score-blind capability evidence and approved-v3
+required before relaunch are recorded below.
+
+The final replacement gate used prepared-v8/protocol-v9 and the separate immutable v3
+approval amendment. The 400-security/full-history smoke passed all seven arms at
+1,112,000 fit rows: DQN 34.14s CPU, PPO 36.51s CPU, Elastic Net 10.01s CPU,
+HistGBT 22.48s CPU, XGBoost 11.93s CUDA, LSTM 252.14s CUDA and Transformer
+319.64s CUDA. The full suite passed 224 tests with three expected non-interactive
+notebook display warnings. Score-blind calibration selected the complete deadline tier
+at 6,625.14 estimated seconds under the six-hour search ceiling. Capability gate v3
+passed every declared arm. `expanded_closeout_approved_v3.yaml` is authority-verified
+with protocol SHA-256
+`d0d4c9c0454924a342839d5c88ae67bd338003cc88f4e2155bb1886d4189e4b5`.
+No replacement score-bearing run or holdout evaluation was launched during this gate.
+
+### 27 September 2026 — explicit neutral IC for constant cross-sections
+
+The first approved-v3 attempt was stopped during the first outer fold after SciPy
+reported `ConstantInputWarning` for constant daily prediction cross-sections. The
+existing calculation already converted the resulting undefined Spearman statistic to
+neutral IC `0.0`; RMSE remained defined. The runner now detects constant actual or
+predicted cross-sections before calling SciPy, records the same explicit neutral IC and
+continues to calculate RMSE normally. This removes ambiguous runtime warnings without
+changing the declared selection objective or numeric fallback. The interrupted run
+`20260927T123550Z-a6e5c43f` remains immutable and did not open the holdout. It cannot be
+resumed after this source change. Two constant-actual/prediction regression cases were
+added; focused scoring/resume tests passed 13 tests and the full suite passed 226 tests
+with only three expected non-interactive notebook display warnings.
+
+### 27 September 2026 — new-user guide and temporary workspace policy
+
+Reworked the repository README into an end-to-end fresh-clone guide covering environment
+creation, dependency groups, CUDA verification, tests, offline smoke, the explicitly
+labelled Slice 1 data-download/validation step, Slice 1 execution, the pinned-bundle
+precondition for approved expanded execution, supervision/resume, zero-argument report
+and dashboard generation, and the educational notebook. Concrete generated run/report
+directory names were removed. The guide records the genuine distribution gap: the
+Git-ignored hash-pinned expanded evidence bundle is not recreated by the Slice 1
+downloader and currently has no public one-command downloader.
+
+Established `.tmp/` as the only new repository-local disposable workspace, documented
+safe and prohibited cleanup boundaries, and added matching repository-agent rules.
+Legacy root-level pytest/tool scratch remains ignored only for a one-time audited cleanup;
+new tools and tests must use `.tmp/<tool>/<task>/`. README generated-ID scans and all
+Markdown documentation links passed; `git diff --check` reported no content errors.
+
+### 27 September 2026 — controlled marginal-effect evidence amendment
+
+Stopped approved-v3 attempt `20260927T124032Z-bff62712` during its second LSTM
+candidate, before family locks or holdout access, after determining that two
+simultaneous-random candidates per family could not support held-constant marginal-
+effect questions. The supervisor recorded a terminal nonzero exit and the partial run
+and logs remain unchanged.
+
+Added a deterministic metadata-driven controlled one-factor design over every
+registered component search dimension. The authoritative runner now persists a
+protocol-bound sensitivity design plus separate proposal and fit ledgers, including
+conditional matched references, parameter levels, held-constant fields, selection-
+eligibility flags, reduced fidelity, fold/seed/scenario identity, complete/failed
+status, partial-cell counts, exception details, traceback and available telemetry.
+Sensitivity trials use only declared inner data and are structurally excluded from
+HPO ranking and family locks. Checkpoint continuation covers completed supervised and
+RL sensitivity cells.
+
+Prepared-v9 and approval amendment v4 declare one inner fold per outer fold, seed 41,
+two deep epochs/patience one and 1,000 RL steps. Score-blind calibration counts 56
+unique sensitivity configurations and estimates 4,305.08 seconds of sensitivity work
+plus 6,625.14 seconds for the deadline HPO matrix, or 10,930.23 seconds before final
+fits, holdout, reporting and retry reserve. The fresh full suite passed 235 tests with
+one Windows symlink skip and three expected non-interactive notebook warnings. The
+final v4 capability gate uses those fresh synthetic receipts and the unchanged
+production-shaped real-data bridge evidence. Approved-v4 authority verification passed
+with protocol SHA-256
+`2b6095fbd48cb93a99e270292292dca1ceaf60b3c4c288f6e714339a66532678`.
+
+Before the final gate, ordinary HPO failure records were brought to parity with the
+controlled-sensitivity contract: supervised and RL terminal failures now retain the
+exact failed fold/seed/scenario, completed and expected cells, elapsed resource time,
+exception type and traceback, while successful partial cells remain in the fit ledger.
+The post-change full suite again passed 235 tests with one platform skip and three
+expected non-interactive notebook warnings; fresh synthetic receipts were issued before
+the final approved-v4 hash above.
+
+### 27 September 2026 — local-time human-readable supervisor logs
+
+Removed the supervisor's extra UTC prefix from human-readable `stdout.log`,
+`stderr.log` and concise terminal messages. Existing child application timestamps are
+retained in operator-local time and normalised to whole-second precision; lines without
+a child timestamp receive the current operator-local timestamp. Structured
+`events.jsonl` and `metrics.jsonl` continue to record `timestamp_utc` for unambiguous
+machine correlation. This is an operational-presentation change only and does not read
+outcomes or change research execution. The focused supervisor suite passed 6 tests,
+including an exact regression for the reported duplicate-timestamp example. The full
+suite then passed 235 tests with one platform skip and three expected non-interactive
+notebook warnings. Fresh v9 synthetic receipts and capability gate
+`capability_gate_sensitivity_v4_final3.json` were issued, and approved-v4 was
+authority-verified at the protocol hash recorded above. No production study was
+launched.

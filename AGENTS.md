@@ -24,6 +24,16 @@
 - Keep local-first layered boundaries; do not add microservices, training notebooks or duplicate orchestration paths without an approved need.
 - Add proportionate tests and record verification in `docs/IMPLEMENTATION_LOG.md`.
 
+## Temporary workspace policy
+
+- Read `docs/operations/TEMPORARY_WORKSPACE.md` before creating local scratch files.
+- Put every new disposable test/tool directory under `.tmp/<tool>/<task>/`; do not
+  create timestamped `tmp*`, `pytest*` or tool-cache folders at repository root.
+- Never place canonical data, immutable runs, reports, approval artefacts or assignment
+  evidence under `.tmp/`.
+- Purge completed scratch work after the owning process exits. Verify the resolved
+  target is the repository's `.tmp/` directory before recursive cleanup.
+
 ## Assignment integrity
 
 - AI may structure, explain and generate reproducible evidence, but must not fabricate the student's first-person reflection, understanding, critique or knowledge gaps.

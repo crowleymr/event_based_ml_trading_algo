@@ -3,12 +3,19 @@
 Launch an approved study through the monitoring wrapper from the repository root:
 
 ```powershell
-.venv\Scripts\python.exe -m trading_pipeline.operations.study_supervisor --study configs/studies/expanded_closeout_approved_v2.yaml --log-dir reports/operations/expanded-closeout-v2-01
+.venv\Scripts\python.exe -m trading_pipeline.operations.study_supervisor --study configs/studies/expanded_closeout_approved_v4.yaml --log-dir reports/operations/expanded-closeout-v4-attempt-1
 ```
 
 Use a new `--log-dir` for each attempt; the wrapper refuses an existing directory.
 The child command is always `python -m trading_pipeline.run --study <protocol>`.
 The monitor does not inspect model outputs, scores, manifests or the holdout.
+
+Approved-v4 first runs the selection-ineligible controlled-sensitivity matrix, then
+the full-fidelity HPO/outer-selection matrix, and opens the descriptive holdout only
+after all family locks are sealed. Score-blind calibration estimates approximately
+3.0 hours for sensitivity plus HPO; allow the documented 6-hour window for final fits,
+holdout evaluation, reporting reserve and retries. The terminal must remain open, but
+the GPU is used only by the declared XGBoost, LSTM and Transformer fits.
 
 To continue a terminally failed run that contains verified cell checkpoints, create a
 new operational log directory and pass the immutable parent run:
@@ -27,10 +34,12 @@ The launching terminal displays only concise lifecycle and phase changes plus
 warnings, errors and final status. It does not stream the complete child log.
 Detailed output and resource samples remain available in the files below.
 
-`events.jsonl` records timestamped startup, every child output line as an info,
+`events.jsonl` records UTC-timestamped startup, every child output line as an info,
 warning or error event, interruption, failure and final exit status. `stdout.log`
-and `stderr.log` preserve timestamped
-child output. `metrics.jsonl` records a heartbeat every ten seconds by default,
+and `stderr.log` preserve child output with one operator-local timestamp at
+whole-second precision. The supervisor removes child timestamp milliseconds and does
+not prepend a second GMT/UTC timestamp to these human-readable logs or concise terminal
+messages. `metrics.jsonl` records a UTC-timestamped heartbeat every ten seconds by default,
 including elapsed time, process-tree RSS, cumulative CPU seconds and interval CPU
 utilization, host RAM, CPU utilization and one/five/fifteen-minute load averages, and
 NVIDIA GPU utilization and used/total VRAM. It also sums study process-tree VRAM

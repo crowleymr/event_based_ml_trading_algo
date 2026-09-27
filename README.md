@@ -1,241 +1,274 @@
-# ML-Driven Short-Horizon Systematic Equity Trading POC
+# ML-Driven Short-Horizon Systematic Equity Trading Research
 
-This repository is a reproducible research application for testing whether machine-learning
-models can improve the weekly cross-sectional ranking of approximately 100 large-cap US
-equities. It combines daily Yahoo market data with point-in-time public SEC fundamentals,
-trains two required model families, converts predictions into long-only portfolios, and
-evaluates them out of sample after transaction costs.
-
-The mission is to demonstrate a complete, leakage-safe machine-learning workflow for a
-real financial decision problem. It is an academic proof of concept, not a live trading
+This repository is a local, reproducible research application for testing whether
+machine-learning models improve weekly cross-sectional US-equity ranking and
+after-cost portfolio outcomes. It is an academic proof of concept, not a live trading
 system or investment recommendation.
 
-## Objectives
+There are two distinct research tracks:
 
-- Preserve and validate raw Yahoo OHLCV and SEC Company Facts data.
-- Enforce the point-in-time rule: market session date must be after the SEC filed date.
-- Build market-only F0 and market-plus-SEC F1 feature sets.
-- Predict five-trading-day forward adjusted-close returns.
-- Select models using chronological training and validation data only.
-- Run E0-E5 with weekly, next-session execution and 10 bps one-way costs.
-- Compare equal-weight and inverse-volatility top-10 portfolios.
-- Persist datasets, models, predictions, holdings, trades, metrics, plots, and audit evidence.
+- **Locked Slice 1** is the original approximately 100-stock study. Its authoritative
+  route is `trading_pipeline.run --config ...`; its completed test is descriptive and
+  must not be reused for model selection.
+- **Expanded close-out study** admits as many as 500 candidates and compares Elastic
+  Net, Histogram GBT, XGBoost, LSTM, Transformer, DQN and PPO under one point-in-time
+  feature contract. Its approved protocol is separate from, and does not rewrite,
+  Slice 1.
 
-Slice 1 deliberately excludes NLP, reinforcement learning, mean-variance optimisation,
-intraday data, Australian equities, live execution, and a production user interface.
+All training and backtesting goes through `trading_pipeline.run`. Reports, the
+dashboard and the notebook only read completed immutable artefacts.
 
 ## Repository layout
 
 ~~~text
 event_based_ml_trading_algo/
-├── README.md                       # Operator and reviewer entry point
-├── pyproject.toml                  # Package metadata and portable dependencies
-├── requirements.txt               # Editable development installation
-├── requirements-lock.txt          # Verified Windows/Python 3.12 environment
-├── configs/
-│   ├── poc.yaml                    # Full live research run
-│   ├── smoke.yaml                  # Deterministic offline smoke run
-│   └── universe.txt                # Fixed 100-equity US universe
-├── data/                           # Git-ignored, preserved source and derived data
-│   ├── raw/{yahoo,sec}/
-│   ├── curated/
-│   └── features/
-├── src/trading_pipeline/
-│   ├── data/                       # Universe, clients, schemas, identifiers, ingestion
-│   ├── features/                   # Market features, PIT fundamentals, feature assembly
-│   ├── modelling/                  # Target, split, models, tuning, prediction, ML metrics
-│   ├── portfolio/                  # Signals, weighting engines, T+1 backtest
-│   ├── tracking/                   # Run artefacts and plots
-│   ├── validation/                 # Persisted-run leakage and integrity audit
-│   ├── reporting/                  # Read-only versioned report generation
-│   ├── config.py                   # Locked configuration validation
-│   ├── environment.py              # CPU/GPU and reproducibility inventory
-│   ├── audit.py                    # Audit command-line entry point
-│   └── run.py                      # End-to-end application entry point
-├── tests/                          # Unit, leakage, accounting, reproducibility, layout tests
-├── notebooks/
-│   ├── poc_results.ipynb           # Legacy Slice 1 report explorer
-│   └── final_evidence.ipynb        # Executable end-to-end evidence showcase
-├── runs/                           # Git-ignored immutable experiment artefacts
-├── docs/                           # Specification, decisions, logs, architecture, evidence
-└── .github/workflows/smoke.yml     # Manual CPU-only test and smoke workflow
+├── configs/                         # Slice 1 and approved expanded protocols
+├── data/                            # Git-ignored source caches and derived data
+├── docs/                            # Specification, decisions, evidence and guides
+├── notebooks/final_evidence.ipynb   # Read-only end-to-end evidence narrative
+├── reports/                         # Generated reports and operational monitoring
+├── runs/                            # Git-ignored immutable experiment artefacts
+├── .tmp/                            # Git-ignored disposable test/tool scratch
+├── src/trading_pipeline/            # Authoritative application code
+├── tests/                           # Unit, leakage, accounting and integration tests
+├── pyproject.toml                   # Package and optional dependency groups
+├── requirements.txt                 # Editable core/test/XGBoost installation
+└── requirements-lock.txt            # Verified core Windows/Python environment
 ~~~
 
-The detailed module-to-requirement map is in
-[Architecture](docs/ARCHITECTURE.md). Each substantive source package also has a
-concise local README defining its interfaces and ownership boundary.
+## Fresh-repository shakedown
 
-## Quickstart
+The commands below use Windows PowerShell. Run every command from the repository
+root—the directory containing this README and `pyproject.toml`. Python 3.12 is the
+verified version; Python 3.11 or newer is supported. Git is needed for provenance.
 
-The supported local runtime is Python 3.11 or newer; the verified environment uses
-Python 3.12. Run commands from the repository root.
+If you downloaded an archive, extract it and use `Set-Location` to enter the extracted
+directory. If you have a repository URL, clone it first:
 
-### Install on Windows PowerShell
+~~~powershell
+git clone <repository-url> event_based_ml_trading_algo
+Set-Location event_based_ml_trading_algo
+~~~
+
+### 1. Create the environment and install dependencies
+
+For Slice 1, tests and the offline smoke run:
 
 ~~~powershell
 py -3.12 -m venv .venv
-.venv/Scripts/python -m pip install --upgrade pip
-.venv/Scripts/python -m pip install -r requirements.txt
-.venv/Scripts/python -m pytest -q
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m pip check
 ~~~
 
-For the exact package versions used by the completed Windows run, install
-requirements-lock.txt first, then install requirements.txt to register the local package.
-On Linux or macOS, create the environment with python3.12 -m venv .venv and replace
-.venv/Scripts/python below with .venv/bin/python.
-
-### Run the smoke pipeline
+For the expanded study, dashboard and notebook, also install the Phase 2 and notebook
+extras:
 
 ~~~powershell
-.venv/Scripts/python -m trading_pipeline.run --config configs/smoke.yaml
+.venv\Scripts\python.exe -m pip install -e ".[test,phase2,notebook]"
+.venv\Scripts\python.exe -m pip check
 ~~~
 
-Smoke mode uses deterministic synthetic data, requires no network access, runs E0-E7,
-and writes a new directory under runs/smoke/. It verifies software behavior only;
-its performance is not research evidence.
+Linux and macOS users can create the environment with `python3.12 -m venv .venv`
+and replace `.venv\Scripts\python.exe` with `.venv/bin/python`. CUDA is optional and
+is not a CI dependency. The approved expanded protocol requests CUDA for XGBoost,
+LSTM and Transformer, while Elastic Net, Histogram GBT, DQN and PPO run on CPU.
 
-### Run the main research pipeline
+To inspect actual PyTorch/CUDA placement before a long run:
 
-SEC automated requests require a real application/operator contact. Set it for the
+~~~powershell
+.venv\Scripts\python.exe -m trading_pipeline.rl.device --device auto
+~~~
+
+`auto` records the requested and actual device and reports an explicit CPU fallback.
+If a CUDA-enabled PyTorch build is required on Windows, the currently verified local
+wheel can be installed separately and checked again:
+
+~~~powershell
+.venv\Scripts\python.exe -m pip install --force-reinstall torch==2.11.0+cu128 --index-url https://download.pytorch.org/whl/cu128
+.venv\Scripts\python.exe -m trading_pipeline.rl.device --device auto
+~~~
+
+### 2. Run tests and the offline smoke experiment
+
+~~~powershell
+.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe -m trading_pipeline.run --config configs/smoke.yaml
+~~~
+
+The smoke experiment uses deterministic synthetic data and requires no network
+access. It verifies the installed software, temporal controls, model interfaces,
+portfolio accounting and artefact audit. Its results are not research evidence.
+The application assigns its internal output directory automatically; you do not need
+to construct or remember a run name.
+
+Put disposable test and tool output under `.tmp/<tool>/<task>/`. To review and clean
+completed scratch, run `python -m trading_pipeline.operations.clean_temp` to list its
+immediate contents, then add `--purge` to remove them. The purge retains `.tmp/` and
+does not target research data, runs or reports. See
+[Temporary workspace policy](docs/operations/TEMPORARY_WORKSPACE.md).
+
+## Download and validate Slice 1 data
+
+Live SEC requests require an honest application/operator contact. Set it for the
 current PowerShell session:
 
 ~~~powershell
 $env:SEC_USER_AGENT = 'TradingResearchPOC Your Real Name your-real-contact@email.org'
-.venv/Scripts/python -m trading_pipeline.run --config configs/poc.yaml
 ~~~
 
-A Git-ignored .sec-user-agent file containing the same value is also supported.
-The main run downloads or reuses Yahoo and SEC data, validates and curates it, builds
-features and splits, freezes validation-selected models, evaluates the test split under
-the run's declared research status, executes E0-E7 plus the SPY benchmark, and audits persisted outputs. E6/E7 are separate XGBoost diagnostics; they do not replace the
-CPU Histogram GBT baseline or change E5's locked E1-E4 source set. Successful
-output appears under runs/<run_id>/.
+A Git-ignored `.sec-user-agent` file containing the same value is also supported.
+Do not use a fabricated contact.
 
-To download and validate data without training:
+Download and validate Slice 1 source data without starting a training run:
 
 ~~~powershell
-.venv/Scripts/python -m trading_pipeline.run --config configs/poc.yaml --ingest-only
+.venv\Scripts\python.exe -m trading_pipeline.data.download --config configs/poc.yaml
 ~~~
 
-To re-audit the completed reference run without retraining:
+The config defaults to `configs/poc.yaml`, so the common invocation can be shortened
+to `.venv\Scripts\python.exe -m trading_pipeline.data.download`.
+
+This step downloads or reuses Yahoo daily market data and SEC Company Facts, validates
+their schemas and identifiers, writes canonical Parquet tables under `data/curated/`,
+maintains source caches under `data/raw/yahoo/` and `data/raw/sec/`, and creates
+`data/catalog.duckdb`. It does **not** train a model or run a backtest. Failed downloads
+leave caches and `data/ingestion_errors.json` in place so the command can be retried.
+
+Raw caches are never silently replaced. A genuinely new source-data vintage should use
+a new data directory and a newly approved protocol rather than overwriting evidence.
+
+## Execute the locked Slice 1 experiment
+
+After the ingestion-only check succeeds:
 
 ~~~powershell
-.venv/Scripts/python -m trading_pipeline.audit --run runs/20260912T071137Z-9899fd9a
+.venv\Scripts\python.exe -m trading_pipeline.run --config configs/poc.yaml
 ~~~
 
-To generate a versioned read-only report from that exact run:
+The authoritative command reuses the caches, then curates data, builds point-in-time
+features, creates purged chronological splits, tunes on training/validation only,
+freezes selection before opening the descriptive test, runs T+1 after-cost backtests,
+and audits the persisted outputs. A new immutable output directory is assigned
+automatically on every invocation.
+
+Slice 1 deliberately excludes the expanded neural-network and RL comparison. Review
+[Slice 1 completion evidence](docs/SLICE1_COMPLETION_REPORT.md) before interpreting
+its results.
+
+## Execute the approved expanded close-out study
+
+The approved expanded protocol is hash-bound to a specific admitted-universe,
+canonical-feature, causal-stack, benchmark and validation-manifest bundle. Its exact
+relative paths and hashes are declared in the approved YAML. Those large immutable
+inputs are Git-ignored. A source-only clone therefore cannot reproduce the approved
+expanded run merely by running the Slice 1 downloader: copy or restore the matching
+evidence bundle first.
+There is currently no public one-command downloader for that pinned bundle. Do not
+substitute newly downloaded files into the approved protocol; their hashes and data
+vintage would differ and require a new documented approval.
+
+When the pinned bundle is present, launch through the read-only resource supervisor:
 
 ~~~powershell
-.venv/Scripts/python -m trading_pipeline.reporting --run runs/20260912T071137Z-9899fd9a --output reports/20260912T071137Z-9899fd9a/v1
+.venv\Scripts\python.exe -m trading_pipeline.operations.study_supervisor --study configs/studies/expanded_closeout_approved_v4.yaml --log-dir reports/operations/expanded-closeout-v4-attempt-1
 ~~~
 
-The output directory must be new. It contains CSV and Parquet tables, a Markdown
-report and provenance JSON. Reporting never retrains, selects or changes the source run.
+The supervisor starts the authoritative `trading_pipeline.run --study ...` process,
+prints concise phase/warning/error/completion messages, and writes detailed console,
+event and CPU/RAM/GPU/VRAM telemetry under the friendly log directory supplied above.
+It does not train, select, repair or inspect scores itself. Choose another unused,
+human-readable log directory for each attempt.
 
-Open [the final evidence notebook](notebooks/final_evidence.ipynb) for the read-only
-methodology narrative, source-code links and generated report explorer. It displays
-security contribution and any architecture/HPO, risk-scenario, frontier and realised
-risk-return tables present in the selected report; absent optional tables are identified
-as unavailable rather than inferred. Set `TRADING_REPORT_DIR` to a generated report
-directory containing `provenance.json`. See [Public Notebook Preparation](docs/PUBLIC_NOTEBOOK.md)
-for the hosted-notebook and optional dashboard workflow.
+### Resume an interrupted or failed expanded attempt
 
-The approved supervised diagnostic rerun is `runs/20260920T010939Z-1225374b` and its
-combined supervised/DQN dashboard report is `reports/20260920T010939Z-1225374b/v1`.
-Its observed-test results are labelled `diagnostic_reproduction_not_model_selection`.
+Resume creates a new immutable child run and never modifies the failed parent. It
+reuses only complete, schema-validated, hash-verified checkpoints and refuses changed
+protocols, inputs, source code or dependencies. Do not edit code or update packages
+between failure and resume.
 
-### Run the Phase 2 exploratory selector and dashboard
-
-Install the optional packages separately from the Slice 1 core runtime:
+The following PowerShell selects the newest failed checkpointed attempt, so you do not
+have to type its generated directory name:
 
 ~~~powershell
-.venv/Scripts/python -m pip install -e ".[test,phase2]"
+$failedRun = Get-ChildItem runs\expanded_closeout -Directory |
+    Where-Object { Test-Path (Join-Path $_.FullName 'failure.json') } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+.venv\Scripts\python.exe -m trading_pipeline.operations.study_supervisor `
+    --study configs/studies/expanded_closeout_approved_v4.yaml `
+    --resume-from $failedRun.FullName `
+    --log-dir reports/operations/expanded-closeout-resume-1
 ~~~
 
-Run the frozen CPU-first selector protocol:
+The runner fails closed if the selected attempt predates resumable checkpoints or is
+otherwise incompatible. See [Expanded study monitoring](docs/operations/STUDY_MONITORING.md)
+for log contents and failure semantics.
+
+## Generate and inspect final results
+
+After an expanded run completes and passes its audit, these commands deliberately use
+the newest verified completed run. No run identifier or repository path is required:
 
 ~~~powershell
-.venv/Scripts/python -m trading_pipeline.rl.runner --config configs/rl_pilot.yaml
+.venv\Scripts\python.exe -m trading_pipeline.reporting.expanded_closeout
+.venv\Scripts\python.exe -m trading_pipeline.dashboard
 ~~~
 
-The v2 protocol accepts `cpu`, `cuda`, or `auto`. CUDA remains optional and is not a
-CI dependency. For a local CUDA 12.8 environment, install the official wheel separately
-and verify actual tensor placement before a run:
+The report generator writes a separate hash-backed report without changing the source
+run. The dashboard opens the newest verified report and offers compatible historical
+run comparisons in its model-monitoring view. It never trains or tunes models.
+
+For the educational narrative, open `notebooks/final_evidence.ipynb` in Jupyter and
+run all cells:
 
 ~~~powershell
-.venv/Scripts/python -m pip install --force-reinstall torch==2.11.0+cu128 --index-url https://download.pytorch.org/whl/cu128
-.venv/Scripts/python -m trading_pipeline.rl.device --device auto
+.venv\Scripts\python.exe -m jupyter lab notebooks/final_evidence.ipynb
 ~~~
 
-`auto` records the requested and actual device and falls back safely to CPU with an
-explicit reason. Each new RL run emits schema-versioned training traces/summaries and a
-short CPU/GPU timing diagnostic. These diagnostics never select a device, model or seed.
+With no `TRADING_REPORT_DIR` override, the notebook discovers the newest generated
+expanded report, verifies its manifest and table hashes, and explains the data pipeline,
+architecture/HPO evidence, risk scenarios, model-conditioned efficient frontiers,
+realised risk-return curves and final benchmark. Student reflection prompts require
+the student's own evidence and wording.
 
-For a completed audited expanded study, generate the report and start the read-only
-dashboard without supplying a repository path or run ID:
+## Research and evidence rules
 
-~~~powershell
-.venv/Scripts/python -m trading_pipeline.reporting.expanded_closeout
-.venv/Scripts/python -m trading_pipeline.dashboard
-~~~
-
-The dashboard selects the latest completed verified report for its main views. Its
-Model monitoring / run comparisons tab compares compatible completed reports and
-shows when each completed, the study/budget label, implemented arm/component/device
-mappings, protocol hash and code commit. Explicit `--expanded-report`, legacy
-`--report`, and optional `--rl-run` arguments are retained for forensic inspection.
-
-Training Diagnostics uses the common telemetry contract for Histogram GBT, XGBoost and
-DQN. Elastic Net shows its solver/final diagnostics and an explicit no-conventional-curve
-notice. The RL run is exploratory and the completed Slice 1 final test is descriptive only.
-The dashboard never trains, tunes, regenerates reports or modifies source artefacts.
-
-The generator prints the selected report path if you want to pin the notebook with
-`TRADING_REPORT_DIR`; otherwise the notebook also discovers the newest report. Open
-`notebooks/final_evidence.ipynb` and run all cells. The expanded loader checks the
-manifest, all eleven Parquet hashes, schemas and row counts. The dashboard's Model
-monitoring tab shows original high-level metric rows across completed reports with
-the same evaluation contract and flags differing research protocols. The complete
-holdout matrix is descriptive only.
-
-Raw caches are not overwritten. Use a new data_dir for a new source-data vintage.
-Every full invocation creates a new run ID and preserves previous experiment artefacts.
+- The completed final test is descriptive. Never use it to select, tune or reject a
+  feature, model, architecture, risk scenario or parameter.
+- All reported numbers, tables and charts must be generated from canonical data or
+  immutable run artefacts. Correct derivation code and regenerate downstream outputs;
+  never hand-patch a published number.
+- Preserve point-in-time joins, purge/embargo boundaries, T+1 execution and transaction
+  costs. Missing required prices fail closed; they are not silently substituted.
+- Keep raw run artefacts immutable. Reports and operational logs live outside `runs/`.
+- The dashboard and notebook are read-only consumers, not alternative orchestration
+  paths.
 
 ## Key documentation
 
 | Document | Purpose |
 |---|---|
-| [Functional Specification v2](docs/FSD_v2.md) | Authoritative research scope, policies, schemas, experiments, and Definition of Done |
-| [Slice 1 Implementation Plan](docs/planning/CODEX_SLICE1_IMPLEMENTATION_PLAN.md) | Authoritative phased build plan and target repository layout |
-| [Architecture and Component Status](docs/ARCHITECTURE.md) | Actual module ownership, planned-layout conformance, and component status |
-| [Slice 1 Completion Report](docs/SLICE1_COMPLETION_REPORT.md) | Definition-of-Done evidence, reproduction commands, limitations, and stage-gate risks |
-| [Documentation Index](docs/README.md) | Current, generated and future documentation map |
-| [Backlog](docs/BACKLOG.md) | Gated Slice 1 close-out and Slice 2+ roadmap |
-| [Experiment Registry](docs/EXPERIMENT_REGISTRY.md) | Immutable machine IDs and semantic labels |
-| [Glossary](docs/GLOSSARY.md) | Project terminology, metrics and research controls |
-| [Assignment Support](docs/assignment/README.md) | Living paper/presentation material and student-owned reflection prompts |
-| [Implementation Log](docs/IMPLEMENTATION_LOG.md) | Chronological implementation and verification record |
-| [AI Use and Verification](docs/AI_USE_AND_VERIFICATION.md) | Challenges, AI-assisted actions, independent checks and student prompts |
-| [Public Notebook Preparation](docs/PUBLIC_NOTEBOOK.md) | Self-contained generated-report workflow; no publication claim |
-| [Decisions and Limitations](docs/DECISIONS.md) | Technical choices and explicitly retained limitations |
-| [Phase 2 RL Gymnasium Pilot](docs/RL_GYM.md) | Frozen MDP, leakage controls, artefact contract and confirmatory boundary |
-| [Planning Index](docs/planning/README.md) | Current and archived planning material |
+| [Functional Specification v2](docs/FSD_v2.md) | Authoritative scope, research controls and artefact contract |
+| [Expanded close-out plan](docs/planning/FINAL_5_DAY_EXPANDED_RESEARCH_CLOSEOUT_PLAN.md) | Current expanded-study critical path and acceptance gates |
+| [Expanded study monitoring](docs/operations/STUDY_MONITORING.md) | Supervisor, telemetry, failure and resume operations |
+| [Temporary workspace policy](docs/operations/TEMPORARY_WORKSPACE.md) | Central `.tmp/` layout, safe purge boundary and legacy cleanup rules |
+| [Architecture](docs/ARCHITECTURE.md) | Module ownership and component status |
+| [Decisions and limitations](docs/DECISIONS.md) | Research and engineering decisions that constrain interpretation |
+| [Slice 1 completion evidence](docs/SLICE1_COMPLETION_REPORT.md) | Locked original-study completion and limitations |
+| [Experiment registry](docs/EXPERIMENT_REGISTRY.md) | Stable experiment identifiers and presentation labels |
+| [Glossary](docs/GLOSSARY.md) | Metrics, concepts and research controls |
+| [Public notebook preparation](docs/PUBLIC_NOTEBOOK.md) | Read-only notebook and optional publication workflow |
+| [AI use and verification](docs/AI_USE_AND_VERIFICATION.md) | AI-assisted actions and student-owned reflection boundary |
+| [Implementation log](docs/IMPLEMENTATION_LOG.md) | Chronological implementation and verification record |
 
-## Outputs and operating notes
+## Known limitations
 
-- data/raw/yahoo/ and data/raw/sec/ preserve original source payloads.
-- data/curated/ is canonical Parquet; data/catalog.duckdb exposes query views.
-- data/features/<run_id>/ preserves the feature and split snapshot.
-- runs/<run_id>/selection.json records validation-only model selection before test scoring.
-- runs/<run_id>/ contains models, predictions, positions, trades, costs, equity curves,
-  metrics, plots, manifests, environment metadata, summary, logs, and audit.json.
-- Generated reports are versioned derivatives outside the immutable source run and
-  record the run ID, input hashes, code revision and generation timestamp.
-- New supervised and RL runs emit schema-versioned `training_trace.parquet` and
-  `training_summary.parquet`; older runs display explicit not-recorded states.
-
-The completed reference run covers 100 equities and passed all persisted-run integrity
-checks. Known research limitations include survivorship bias, retrospective Yahoo
-adjustments, incomplete exact-tag EPS coverage for Visa, mixed SEC fiscal durations,
-and a five-day close label that is not identical to the realised T+1 execution window.
-Review [the completion report](docs/SLICE1_COMPLETION_REPORT.md) before interpreting results.
+The studies retain survivorship bias, current-identifier and retrospective Yahoo
+adjustment limitations, incomplete exact-tag SEC coverage, mixed fiscal durations,
+and a five-session label that is not identical to the realised T+1 holding interval.
+The expanded close-out protocol is deadline-constrained exploratory evidence, not a
+confirmatory claim. CUDA improves selected production-scale models but does not make
+cross-hardware floating-point results bit-identical.
