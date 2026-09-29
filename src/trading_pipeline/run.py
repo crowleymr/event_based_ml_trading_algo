@@ -263,6 +263,8 @@ def main():
     parser.add_argument("--ingest-only", action="store_true")
     parser.add_argument("--resume-from", type=Path,
                         help="Failed expanded run to continue in a new lineage-linked run")
+    parser.add_argument("--allow-code-drift", action="store_true",
+                        help="Explicitly permit verified cell reuse after an engineering code change")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     if args.study:
@@ -272,10 +274,13 @@ def main():
         repository_root = Path(__file__).resolve().parents[2]
         authority = verify_study_authority(study, repository_root=repository_root)
         print(run_study(study, authority, repository_root=repository_root,
-                        resume_from=args.resume_from))
+                        resume_from=args.resume_from,
+                        allow_code_drift=args.allow_code_drift))
         return
     if args.resume_from:
         parser.error("--resume-from applies only to --study")
+    if args.allow_code_drift:
+        parser.error("--allow-code-drift applies only to --study resume")
     cfg = load_config(args.config)
     if args.ingest_only:
         ingest(cfg)

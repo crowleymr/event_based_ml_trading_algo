@@ -80,16 +80,41 @@ def test_supervisor_forwards_resume_source(tmp_path, monkeypatch):
     assert starting["resume_from"] == str(source.resolve())
 
 
+def test_supervisor_forwards_explicit_code_drift_override(tmp_path, monkeypatch):
+    study = tmp_path / "approved.yaml"
+    study.write_text("study: mock", encoding="utf-8")
+    source = tmp_path / "failed-run"
+    source.mkdir()
+    calls = []
+
+    def start(command, **kwargs):
+        calls.append(command)
+        return FakeProcess(0)
+
+    monkeypatch.setattr(monitor.subprocess, "Popen", start)
+    output = tmp_path / "monitor"
+    sample = {"system": {}, "process_tree": {}, "gpu": {"available": False}}
+    assert monitor.supervise(
+        study, output, interval_seconds=0.01, resume_from=source,
+        allow_code_drift=True, sampler=lambda pid: sample,
+    ) == 0
+    assert calls[0][-3:] == ["--resume-from", str(source.resolve()), "--allow-code-drift"]
+    starting = json.loads((output / "events.jsonl").read_text().splitlines()[0])
+    assert starting["allow_code_drift"] is True
+
+
 def test_console_filter_prints_status_but_not_complete_log(capsys):
     events = io.StringIO()
     output = io.StringIO()
     source = io.StringIO(
         "ordinary dependency chatter\n"
+        "2026-09-27 INFO Controlled sensitivity candidate started candidate=1/220\n"
         "2026-09-27 INFO Inner candidate started fold=outer_1 arm=E1 trial=T1\n"
     )
     monitor._drain(source, "stderr", output, events, monitor.threading.Lock())
     console = capsys.readouterr().out
     assert "ordinary dependency chatter" not in console
+    assert "Controlled sensitivity candidate started" in console
     assert "Inner candidate started" in console
 
 

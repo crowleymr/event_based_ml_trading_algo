@@ -6,6 +6,7 @@ It never reads a legacy run. Unsupported arms fail before any score-bearing data
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from copy import deepcopy
 import hashlib
@@ -82,6 +83,17 @@ def _write_new(path: Path, value: object) -> None:
 def _append(path: Path, value: object) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(value, sort_keys=True, default=str, allow_nan=False) + "\n")
+
+
+def _append_many(path: Path, values: list[dict]) -> None:
+    """Append one cell's ordered JSONL evidence with a single file open."""
+    if not values:
+        return
+    with path.open("a", encoding="utf-8") as handle:
+        handle.writelines(
+            json.dumps(value, sort_keys=True, default=str, allow_nan=False) + "\n"
+            for value in values
+        )
 
 
 def _manifest(root: Path, relative: str, authority: VerifiedStudyAuthority) -> dict:
@@ -615,7 +627,8 @@ def _rl_trial_cell(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
                    scenario: str, fit_dates: tuple[date, ...], score_dates: tuple[date, ...],
                    rows: list[dict], bars: pl.DataFrame, outputs: pl.DataFrame,
                    feature_sha256: str, outputs_sha256: str, fold_sha256: str,
-                   output: Path, total_timesteps: int | None = None):
+                   output: Path, total_timesteps: int | None = None,
+                   episode_cache: dict | None = None):
     steps = (study.config["search"]["rl_training"]["total_timesteps"]
              if total_timesteps is None else total_timesteps)
     if type(steps) is not int or steps < 1:
@@ -629,23 +642,54 @@ def _rl_trial_cell(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
                   feature_sha256=feature_sha256, outputs_sha256=outputs_sha256,
                   fold_sha256=fold_sha256, protocol_sha256=authority.protocol_sha256,
                   scenario=scenario)
-    train = _rl_episode(split="fit", dates=fit_dates, **common)
-    score = _rl_episode(split="score", dates=score_dates, **common)
+    # Episode construction scans the full verified feature/output/price views and is
+    # invariant to policy family, architecture, hyperparameters, seed and trial ID.
+    # Scope this cache in callers to one outer fold so at most the three declared
+    # risk-scenario pairs remain resident. Candidate training and evidence remain
+    # independent; only their immutable input objects are reused.
+    cache_key = (fit_dates, score_dates, scenario)
+    cached = episode_cache.get(cache_key) if episode_cache is not None else None
+    if cached is None:
+        train = _rl_episode(split="fit", dates=fit_dates, **common)
+        score = _rl_episode(split="score", dates=score_dates, **common)
+        if episode_cache is not None:
+            # Risk scenarios change frozen sleeve weights, not the fold calendar
+            # or canonical price lookup. Intern those dominant immutable objects
+            # across scenario entries so the bounded cache does not replicate the
+            # multi-year price dictionaries three times.
+            prior = next((pair for (prior_fit, prior_score, _), pair in
+                          episode_cache.items()
+                          if prior_fit == fit_dates and prior_score == score_dates), None)
+            if prior is not None:
+                train = replace(train, dataset=replace(
+                    train.dataset, prices=prior[0].dataset.prices,
+                    calendar=prior[0].dataset.calendar))
+                score = replace(score, dataset=replace(
+                    score.dataset, prices=prior[1].dataset.prices,
+                    calendar=prior[1].dataset.calendar))
+            episode_cache[cache_key] = (train, score)
+    else:
+        train, score = cached
+    price_rows = {"rl_price_eligibility.jsonl": [], "rl_price_exclusions.jsonl": []}
     for episode in (train, score):
         for summary in episode.eligibility:
-            _append(output / "rl_price_eligibility.jsonl", {
+            row = {
                 "trial_id": trial_id, "fold_id": fold_id, "seed": seed,
                 "risk_scenario": scenario,
                 "split": episode.dataset.split, "source_hashes": episode.source_hashes,
                 **summary,
-            })
+            }
+            price_rows["rl_price_eligibility.jsonl"].append(row)
         for exclusion in episode.exclusions:
-            _append(output / "rl_price_exclusions.jsonl", {
+            row = {
                 "trial_id": trial_id, "fold_id": fold_id, "seed": seed,
                 "risk_scenario": scenario,
                 "split": episode.dataset.split, "source_hashes": episode.source_hashes,
                 **exclusion,
-            })
+            }
+            price_rows["rl_price_exclusions.jsonl"].append(row)
+    for name, evidence in price_rows.items():
+        _append_many(output / name, evidence)
     result = execute_study_rl_trial(
         study=study, authority=authority, component_id=arm["component_id"],
         context=FitContext(authority.study_id, trial_id, fold_id, seed,
@@ -660,7 +704,8 @@ def _rl_trial_cell(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
         raise ValueError("RL trial returned an invalid certainty-equivalent objective")
     return {"certainty_equivalent_mean": float(primary),
             "telemetry": dict(result.telemetry), "metrics": dict(result.metrics),
-            "actions": result.actions, "equity_curve": result.equity_curve}
+            "actions": result.actions, "equity_curve": result.equity_curve,
+            "price_rows": price_rows}
 
 
 def _rl_scenarios(config: dict) -> tuple[str, ...]:
@@ -704,25 +749,11 @@ def _rl_checkpoint_rows(output: Path, trial_id: str, fold_id: str, seed: int,
     return complete, resource, paths
 
 
-def _rl_price_rows(output: Path, trial_id: str, fold_id: str, seed: int,
-                   scenario: str) -> dict[str, list[dict]]:
-    records = {}
-    for name in ("rl_price_eligibility.jsonl", "rl_price_exclusions.jsonl"):
-        path = output / name
-        records[name] = [row for row in
-                         (json.loads(line) for line in path.read_text(encoding="utf-8").splitlines())
-                         if row.get("trial_id") == trial_id and row.get("fold_id") == fold_id
-                         and row.get("seed") == seed and row.get("risk_scenario") == scenario] \
-            if path.is_file() else []
-    return records
-
-
 def _restore_rl_price_rows(output: Path, price_rows: dict[str, list[dict]]) -> None:
     for name, rows in price_rows.items():
         if name not in {"rl_price_eligibility.jsonl", "rl_price_exclusions.jsonl"}:
             raise ValueError("Unknown RL price evidence file")
-        for row in rows:
-            _append(output / name, row)
+        _append_many(output / name, rows)
 
 
 def _sensitivity_terminal_failure(*, trial_id: str, proposal_index: int,
@@ -776,9 +807,20 @@ def _run_controlled_sensitivity(
     })
     LOGGER.info("Controlled sensitivity started arms=%d folds_per_outer=%d",
                 len(arms), fold_count)
+    total_candidates = sum(
+        len(designs[arm["id"]]["proposals"])
+        * (len(_rl_scenarios(study.config)) if arm["interface"] == "RLPolicy" else 1)
+        for _outer_fold in outer for arm in arms
+    )
+    total_cells = total_candidates * fold_count * len(seeds)
+    candidate_number = 0
+    completed_total = 0
     for outer_fold in outer:
         outer_id = outer_fold["fold_id"]
         sensitivity_folds = inner[outer_id][:fold_count]
+        # Shared by DQN and PPO for this outer fold only. The three scenario
+        # entries avoid the former unbounded cross-fold episode retention.
+        rl_episode_cache = {}
         for arm in arms:
             arm_id = arm["id"]
             design = designs[arm_id]
@@ -786,6 +828,7 @@ def _run_controlled_sensitivity(
                 scenarios = (_rl_scenarios(study.config)
                              if arm["interface"] == "RLPolicy" else (None,))
                 for scenario in scenarios:
+                    candidate_number += 1
                     scenario_token = f"-{scenario}" if scenario else ""
                     trial_id = f"SENS-{arm_id}{scenario_token}-{outer_id}-{proposal_index + 1:03d}"
                     proposal = {
@@ -800,6 +843,12 @@ def _run_controlled_sensitivity(
                     completed = 0
                     active_cell = None
                     started = time.perf_counter()
+                    LOGGER.info(
+                        "Controlled sensitivity candidate started candidate=%d/%d "
+                        "cells=%d/%d arm=%s fold=%s scenario=%s trial=%s",
+                        candidate_number, total_candidates, completed_total, total_cells,
+                        arm_id, outer_id, scenario or "not_applicable", trial_id,
+                    )
                     scores = []
                     try:
                         for part in sensitivity_folds:
@@ -846,7 +895,8 @@ def _run_controlled_sensitivity(
                                             score_dates=score_dates, rows=rows, bars=bars,
                                             outputs=outputs, feature_sha256=feature_sha256,
                                             outputs_sha256=outputs_sha256, fold_sha256=fold_sha256,
-                                            output=output, total_timesteps=rl_steps)
+                                            output=output, total_timesteps=rl_steps,
+                                            episode_cache=rl_episode_cache)
                                         record = {**active_cell, "trial_id": trial_id,
                                                   "outer_fold_id": outer_id,
                                                   "proposal_index": proposal_index,
@@ -858,8 +908,7 @@ def _run_controlled_sensitivity(
                                                   "selection_eligible": False}
                                         complete_row, resource, paths = _rl_checkpoint_rows(
                                             output, trial_id, part["fold_id"], seed, scenario)
-                                        price_rows = _rl_price_rows(
-                                            output, trial_id, part["fold_id"], seed, scenario)
+                                        price_rows = result["price_rows"]
                                     else:
                                         record = prior_cell["record"]["fit"]
                                         complete_row = prior_cell["record"]["rl_complete"]
@@ -877,6 +926,7 @@ def _run_controlled_sensitivity(
                                 _append(output / "sensitivity_fit_ledger.jsonl", record)
                                 scores.append(record)
                                 completed += 1
+                                completed_total += 1
                         terminal = {
                             "trial_id": trial_id, "proposal_index": proposal_index,
                             "status": "complete", "selection_eligible": False,
@@ -891,6 +941,14 @@ def _run_controlled_sensitivity(
                             terminal["mean_certainty_equivalent"] = sum(
                                 item["certainty_equivalent_mean"] for item in scores) / expected
                         _append(output / "sensitivity_trial_ledger.jsonl", terminal)
+                        LOGGER.info(
+                            "Controlled sensitivity candidate completed candidate=%d/%d "
+                            "cells=%d/%d arm=%s fold=%s scenario=%s trial=%s "
+                            "elapsed_seconds=%.3f",
+                            candidate_number, total_candidates, completed_total, total_cells,
+                            arm_id, outer_id, scenario or "not_applicable", trial_id,
+                            terminal["resource_seconds"],
+                        )
                     except Exception as exc:
                         if active_cell is not None:
                             _append(output / "sensitivity_fit_ledger.jsonl", {
@@ -904,9 +962,15 @@ def _run_controlled_sensitivity(
                             started=started, completed_cells=completed,
                             expected_cells=expected, active_cell=active_cell, exc=exc)
                         _append(output / "sensitivity_trial_ledger.jsonl", terminal)
-                        LOGGER.warning("Controlled sensitivity failed arm=%s trial=%s error=%s: %s",
-                                       arm_id, trial_id, type(exc).__name__, exc)
-    LOGGER.info("Controlled sensitivity completed")
+                        LOGGER.warning(
+                            "Controlled sensitivity candidate failed candidate=%d/%d "
+                            "cells=%d/%d arm=%s fold=%s scenario=%s trial=%s error=%s: %s",
+                            candidate_number, total_candidates, completed_total, total_cells,
+                            arm_id, outer_id, scenario or "not_applicable", trial_id,
+                            type(exc).__name__, exc,
+                        )
+    LOGGER.info("Controlled sensitivity completed candidates=%d cells=%d/%d",
+                total_candidates, completed_total, total_cells)
 
 
 def _run_rl_outer(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
@@ -917,6 +981,10 @@ def _run_rl_outer(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
                   checkpoints: CheckpointStore, source: Path | None) -> None:
     outer_id = outer_fold["fold_id"]
     for scenario in _rl_scenarios(study.config):
+        # The scenario loop is outermost, so three fold-specific pairs cover both
+        # inner folds and the selected outer evaluation without retaining other
+        # risk scenarios in memory.
+        episode_cache = {}
         candidates = []
         for index, params in enumerate(proposals):
             trial_id = f"{arm['id']}-{scenario}-{outer_id}-{index + 1:03d}"
@@ -945,7 +1013,8 @@ def _run_rl_outer(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
                                 scenario=scenario, fit_dates=fit_dates, score_dates=score_dates,
                                 rows=rows, bars=bars, outputs=outputs,
                                 feature_sha256=feature_sha256, outputs_sha256=outputs_sha256,
-                                fold_sha256=fold_sha256, output=output)
+                                fold_sha256=fold_sha256, output=output,
+                                episode_cache=episode_cache)
                             record = {"trial_id": trial_id, "arm_id": arm["id"],
                                       "risk_scenario": scenario, "outer_fold_id": outer_id,
                                       "inner_fold_id": fold["fold_id"], "seed": seed,
@@ -953,8 +1022,7 @@ def _run_rl_outer(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
                                       "telemetry": result["telemetry"]}
                             complete, resource, paths = _rl_checkpoint_rows(
                                 output, trial_id, fold["fold_id"], seed, scenario)
-                            price_rows = _rl_price_rows(output, trial_id, fold["fold_id"], seed,
-                                                        scenario)
+                            price_rows = result["price_rows"]
                         else:
                             record = prior_cell["record"]["fit"]
                             complete = prior_cell["record"]["rl_complete"]
@@ -1017,14 +1085,15 @@ def _run_rl_outer(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
                     scenario=scenario, fit_dates=fit_dates, score_dates=score_dates,
                     rows=rows, bars=bars, outputs=outputs,
                     feature_sha256=feature_sha256, outputs_sha256=outputs_sha256,
-                    fold_sha256=fold_sha256, output=output)
+                    fold_sha256=fold_sha256, output=output,
+                    episode_cache=episode_cache)
                 record = {"arm_id": arm["id"], "risk_scenario": scenario,
                           "outer_fold_id": outer_id, "seed": seed,
                           "certainty_equivalent_mean": result["certainty_equivalent_mean"],
                           "telemetry": result["telemetry"]}
                 complete, resource, paths = _rl_checkpoint_rows(
                     output, selected[0], outer_id, seed, scenario)
-                price_rows = _rl_price_rows(output, selected[0], outer_id, seed, scenario)
+                price_rows = result["price_rows"]
             else:
                 record = prior_cell["record"]["fit"]
                 complete = prior_cell["record"]["rl_complete"]
@@ -1044,7 +1113,7 @@ def _run_rl_outer(*, study: ResolvedStudy, authority: VerifiedStudyAuthority,
 
 
 def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, repository_root: Path,
-              resume_from: Path | None = None) -> Path:
+              resume_from: Path | None = None, allow_code_drift: bool = False) -> Path:
     """Execute classical nested selection with no legacy-run or report dependency."""
     root = repository_root.resolve()
     registry, arms, outer, inner, holdout, feature_path, snapshot = _preflight(study, authority, root)
@@ -1088,6 +1157,9 @@ def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, reposi
         raise ValueError("Study runs root escapes repository")
     code_sha = code_state_sha256(root)
     source = None
+    source_code_sha = None
+    if allow_code_drift and resume_from is None:
+        raise ValueError("Code-drift override requires a resume source")
     if resume_from is not None:
         source = Path(resume_from).resolve()
         if source.parent != runs_root or not source.is_dir():
@@ -1096,9 +1168,10 @@ def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, reposi
         if not started_path.is_file() or (source / "completion.json").exists():
             raise ValueError("Resume source must be an incomplete expanded study")
         prior = json.loads(started_path.read_text(encoding="utf-8"))
+        source_code_sha = prior.get("code_state_sha256")
         if (prior.get("protocol_sha256") != authority.protocol_sha256
                 or prior.get("input_sha256") != dict(authority.input_sha256)
-                or prior.get("code_state_sha256") != code_sha
+                or (source_code_sha != code_sha and not allow_code_drift)
                 or prior.get("study_id") != authority.study_id
                 or prior.get("run_id") != source.name
                 or not (source / "protocol.json").is_file()
@@ -1110,6 +1183,7 @@ def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, reposi
         # Validate every indexed checkpoint and the terminal marker before creating a run.
         CheckpointStore(source, protocol_sha256=authority.protocol_sha256,
                         code_sha256=code_sha, source=source,
+                        source_code_sha256=source_code_sha,
                         allow_unmarked=unmarked)
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
     output = runs_root / run_id
@@ -1134,13 +1208,18 @@ def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, reposi
             if (source / "failure.json").is_file() else None,
             "source_checkpoint_index_sha256": sha256(source_index)
             if source_index.is_file() else None,
-            "relation": "verified_cell_continuation",
+            "relation": "verified_cell_continuation_across_authorised_code_drift"
+            if source_code_sha != code_sha else "verified_cell_continuation",
+            "code_drift_authorised": bool(source_code_sha != code_sha),
+            "source_code_state_sha256": source_code_sha,
+            "resumed_code_state_sha256": code_sha,
             "source_terminal_status": "failed" if (source / "failure.json").is_file()
             else "interrupted_without_marker"}
     _write_new(output / "protocol.json", config)
     _write_new(output / "started.json", metadata)
     checkpoints = CheckpointStore(output, protocol_sha256=authority.protocol_sha256,
                                   code_sha256=code_sha, source=source,
+                                  source_code_sha256=source_code_sha,
                                   allow_unmarked=source is not None and not
                                   (source / "failure.json").is_file(),
                                   code_guard=lambda: code_state_sha256(root))
@@ -1346,6 +1425,9 @@ def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, reposi
             final_choices[arm["id"]] = {"proposal_index": chosen[0], "parameters": chosen[1],
                                         "pooled_inner_mean_ic": chosen[2],
                                         "pooled_inner_mean_rmse": chosen[3]}
+        # The same sealed holdout episode inputs serve both policy families. Keep
+        # one pair per risk scenario; policies still train and evaluate separately.
+        holdout_rl_episode_cache = {}
         for arm in rl_arms:
             for scenario in _rl_scenarios(config):
                 ranked = []
@@ -1461,15 +1543,15 @@ def run_study(study: ResolvedStudy, authority: VerifiedStudyAuthority, *, reposi
                             outputs_sha256=rl_outputs_sha256,
                             fold_sha256=authority.input_sha256[
                                 config["validation"]["final_holdout"]["manifest"]],
-                            output=output)
+                            output=output,
+                            episode_cache=holdout_rl_episode_cache)
                         record = {"arm_id": arm["id"], "risk_scenario": scenario,
                                   "seed": seed,
                                   "certainty_equivalent_mean": result["certainty_equivalent_mean"],
                                   "telemetry": result["telemetry"]}
                         complete, resource, paths = _rl_checkpoint_rows(
                             output, trial_id, "holdout", seed, scenario)
-                        price_rows = _rl_price_rows(output, trial_id, "holdout", seed,
-                                                    scenario)
+                        price_rows = result["price_rows"]
                     else:
                         record = prior_cell["record"]["fit"]
                         complete = prior_cell["record"]["rl_complete"]

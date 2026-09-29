@@ -1,5 +1,25 @@
 # Implementation log
 
+## 2026-09-28 — Assignment-specific evidence exporter
+
+- Added the separate read-only `trading_pipeline.reporting.assignment_export` CLI. It
+  requires one completed, audit-verified expanded run and its hash-verified WP7 report,
+  refuses incomplete or mismatched inputs, and writes only to a new version beneath
+  `reports/assignment/<run-id>/`.
+- Generated reproducible CSV/Parquet evidence for controlled, selection-ineligible
+  sensitivity contrasts; recomputed and ledger-reconciled outer/holdout IC, RMSE and
+  MAE; recorded fit telemetry; the approved model-input feature dictionary; outer-fit,
+  stopping, outer-score and descriptive-holdout feature statistics; explicit evidence
+  availability; and provenance. Count units are retained and the single-seed limitation
+  is emitted as unavailable rather than estimated.
+- Generated `reports/assignment/20260928T005423Z-0634efaf/v1` from immutable run
+  `20260928T005423Z-0634efaf` and its existing expanded report. Its manifest declares
+  1,307 source-run hashed artefacts, 18 direct report/export inputs and 14 hashed output
+  files across seven tables. No file under `runs/` or the WP7 report was modified.
+- Verification: focused exporter plus expanded-report tests passed 11 tests. The
+  generated assignment manifest's 14 output hashes and all Parquet row counts were
+  independently rechecked after generation.
+
 ## 2026-09-27 — Safe temporary workspace cleanup
 
 - Added a repository-derived cleanup command for disposable `.tmp/` contents. Its
@@ -1169,3 +1189,254 @@ notebook warnings. Fresh v9 synthetic receipts and capability gate
 `capability_gate_sensitivity_v4_final3.json` were issued, and approved-v4 was
 authority-verified at the protocol hash recorded above. No production study was
 launched.
+
+### 28 September 2026 — linear RL evidence capture and visible sensitivity progress
+
+At the human's direction, stopped approved-v4 attempt
+`20260927T192408Z-b32c71ba` after the live heartbeat and immutable ledgers established
+that it was active but increasingly slow. It had completed 47 of 220 controlled-
+sensitivity cells with no recorded cell failure, had not sealed family locks and had
+not opened the holdout. The supervisor recorded the forced child exit; the partial run
+and operational logs were not edited. Because execution code changed, its checkpoints
+are deliberately not resumable.
+
+Removed the quadratic RL checkpoint path that reread and decoded all accumulated
+`rl_price_eligibility.jsonl` and `rl_price_exclusions.jsonl` rows after every cell.
+`_rl_trial_cell` now returns the exact rows it has just appended and callers store those
+rows directly in the cell checkpoint. Immutable causal episode inputs are cached by
+fit dates, score dates, risk scenario and pinned source/protocol hashes so architecture
+candidates train independently on the same materialised dataset without repeatedly
+rebuilding it. Each candidate still writes its own eligibility/exclusion evidence.
+
+Added score-free controlled-sensitivity start, completion and failure messages with
+candidate/cell counters, arm, fold, risk scenario, trial ID and elapsed time. The
+supervisor now includes these messages in its concise terminal filter. The expanded
+focused suite passed 28 tests; the full suite passed 236 tests with one Windows skip
+and three expected headless-notebook warnings. Fresh v10 synthetic receipts and
+`capability_gate_sensitivity_v5.json` passed all seven arms. Approved-v5 was generated
+separately from immutable approved-v4 and authority-verified at protocol SHA-256
+`231a824aa1c1167f081408972772c587d60ccbd9b7e5688ee8d037869c2ef84b`.
+The fresh supervised attempt launched as run `20260927T212513Z-49234dd3` with operational
+label `expanded-closeout-v5-attempt-1`; the terminal and detailed log both displayed
+the first score-free `candidate=1/220 cells=0/220` controlled-sensitivity status.
+
+### 28 September 2026 — bounded RL episode reuse after measured outer-fold cycle
+
+The lineage continuation `20260927T231630Z-67e4fafb` was deliberately paused after
+124 of 220 controlled-sensitivity cells had completed. All 124 cells have immutable
+checkpoints; the active 125th LSTM sensitivity candidate had not completed, and no
+ordinary HPO estimate, family lock or holdout access had occurred. The supervisor
+recorded the forced worker exit. The source run and its ledgers were not edited.
+
+Measured evidence separated model work from orchestration: the DQN/PPO backends needed
+about one second for their reduced-fidelity training, while uncached candidates needed
+about one minute because the same verified fold/scenario episodes were reconstructed
+from the expanded feature, causal-output and price views. The central runner now uses
+a caller-scoped episode cache keyed by exact fit dates, score dates and risk scenario.
+Controlled sensitivity shares it across the DQN and PPO arms for one outer fold;
+ordinary RL HPO scopes it to one risk scenario; the descriptive holdout shares it
+across policy families. Candidate policies, seeds, training state, metrics, artefacts
+and evidence rows remain independent. The dominant fold price dictionaries and calendar
+are interned across risk scenarios, so reuse does not recreate the previous unbounded
+multi-fold memory retention.
+
+The change does not alter the approved protocol, candidate identities, parameter
+values, fidelity, model outputs or selection rules. Continuation must explicitly record
+authorised code drift and reuse every hash-verified completed cell. Focused controlled-
+sensitivity/RL/resume verification passed 20 tests; the cache-specific suite passed 6;
+the full suite passed 240 tests with one Windows platform skip and three expected
+headless-notebook display warnings.
+
+### 28 September 2026 — read-only terminal study dashboard
+
+Added `scripts/watch-study.ps1`, a read-only PowerShell dashboard outside the
+code-state-bound Python execution path. It automatically selects the latest operational
+attempt or accepts an explicit `-LogDir`, and presents an ASCII header, current
+candidate/trial/cell state, live candidate elapsed time, local progress and heartbeat
+timestamps, total run time, process/system CPU, process RSS, available RAM, GPU load
+and VRAM. It reads only supervisor logs and does not signal or inspect research
+outcomes. `Ctrl+C` therefore closes the dashboard without stopping the study.
+
+One-shot rendering was verified against active continuation
+`expanded-closeout-v5-resume-3`: it resolved the current Transformer sensitivity
+candidate and rendered both progress and resource fields. Redirected-output screen
+clearing and PowerShell's automatic ISO-date conversion were covered by the same live
+snapshot check. The monitoring run remained active and its Python code-state hash was
+unchanged.
+
+### 28 September 2026 — terminal dashboard phase and progression refinement
+
+Refined `scripts/watch-study.ps1` without changing the active study's Python execution
+path. The summary now presents the broad study phase separately from its activity,
+combines process RSS and available host memory on one RAM line, and renders the latest
+event as vertical fields. A borderless progression table reads the current run's
+protocol, controlled-sensitivity/HPO trial ledgers and metadata-driven arm registry to
+show completed/planned candidates plus cumulative runtime for each outer fold.
+
+The observed-duration ETA uses only same-arm, same-fold completed-candidate medians.
+Remaining folds without an observation are excluded and explicitly make the estimate
+a partial lower bound, preventing resumed near-zero checkpoint timings from being
+extrapolated into untouched work. PowerShell parsing and a live one-shot render against
+`expanded-closeout-v5-resume-3` passed; the snapshot showed phase `HPO`, activity
+`Controlled sensitivity`, all seven registry arms, both outer-fold columns and a
+vertically rendered current event. The research worker remained active throughout.
+
+The operator layout was subsequently consolidated into four ordered sections: `Run
+status`, `Observed-duration ETA`, `Progress by model arm`, and `System status`. Run
+status now owns the latest event fields, eliminating duplicate trial and timestamp
+lines; the internal heartbeat was removed from the display. Fold headers are explicit
+`HPO_outer_1`/`HPO_outer_2`, and metadata-driven `Final_training` and `Holdout` columns
+track expected cells from the immutable holdout-fit ledger without modifying the
+runner. The live one-shot check passed after the active study transitioned from
+controlled sensitivity into nested HPO.
+
+After observing the nested-selection display, replaced the aggregate arm progress and
+runtime-only fold cells with per-fold candidate progression. Each HPO fold now renders
+`completed/planned` first and adds its cumulative runtime in parentheses only after
+work completes, while untouched folds explicitly show `0/planned`. A live render
+during the first LSTM outer-fold search verified classical arms at `2/2`, LSTM at
+`1/2`, future supervised folds at `0/2`, and RL folds at `0/6`.
+
+The fold display was then corrected to reflect the full nested structure without
+creating an unreadably wide table. Two stacked outer-fold tables now show `Inner 1`,
+`Inner 2`, and `Outer eval` independently, followed by a compact final-evaluation
+table. Progress is derived from `fit_ledger.jsonl` and `outer_fit_ledger.jsonl`, not
+from inferred terminal state. A live check showed completed classical inner and outer
+cells, both completed LSTM inner cells, and the still-running LSTM outer evaluation
+separately and correctly.
+
+Restored the completed controlled-sensitivity phase to the persistent dashboard view.
+The previous phase switch retained all 220 immutable records but stopped rendering
+them once selection HPO began. A compact, explicitly selection-ineligible table now
+shows its total completion and per-arm counts/runtimes split across outer-history inner
+fold 1, followed by the ordinary nested-HPO and final-evaluation tables.
+
+Added concise educational objective subtitles beneath every progress-phase heading.
+They distinguish selection-ineligible controlled sensitivity, nested inner-fold tuning
+plus outer-window assessment, and locked final refitting plus descriptive holdout
+reporting without reopening selection.
+
+Replaced qualitative `pending` values in the final-evaluation table with protocol-known
+completed/expected counts. Supervised arms now begin at `0/1`; DQN and PPO begin at
+`0/3` because each has one final cell per declared risk scenario. `running` and
+`waiting` remain secondary labels while a final fit/score call is in flight.
+
+Replaced the misleading partial `Observed-duration ETA` with an overall remaining-time
+estimate. The monitor verifies the protocol-pinned capability gate and its declared
+score-blind calibration hash, counts remaining nested-HPO, outer-evaluation and combined
+final-fit/holdout cells, and uses the larger of each arm's live median or calibrated
+production cell duration. It refuses an overall ETA if that evidence is unavailable.
+The display is rounded to five minutes to avoid false precision; a live verification
+produced an approximately two-hour overall planning estimate rather than the former
+five-minute measured lower bound.
+
+Added an additive ETA reconciliation showing remaining inner HPO, outer evaluations,
+and final fit/holdout separately (plus sensitivity while active). The component values
+are rounded to five minutes and summed to the displayed total, making clear why the
+backward-looking completed-cell runtimes in the progress tables do not themselves add
+up to the forecast. A later live snapshot reflected study progress with a reconciled
+`45m + 15m + 15m = 1h 15m` planning estimate.
+
+### 28 September 2026 — verified completion takes precedence over a late process exit
+
+Corrected a terminal-dashboard status conflict for run
+`20260928T005423Z-0634efaf`. The authoritative runner logged completion and produced
+`completion.json`; its referenced `audit.json` had status `passed` and a matching
+SHA-256. Eight seconds later the Windows process returned `3221226505` (`0xC0000409`),
+so the operational supervisor appended a failure event even though the immutable run
+had already been sealed.
+
+`scripts/watch-study.ps1` now verifies the completion status, audit status, run ID and
+sealed audit hash before resolving the displayed state. Verified evidence reports
+`COMPLETED`; a subsequent non-zero process exit is retained as a separate yellow
+operational warning. Failures before a verified completion seal still report
+`FAILED`. PowerShell parsing and a one-shot render against the affected attempt passed,
+showing all study cells complete and the exit anomaly without misclassifying the
+research result.
+
+### 28 September 2026 — expanded report Windows path normalisation
+
+The first read-only WP7 generation attempt against completed audited run
+`20260928T005423Z-0634efaf` failed closed before writing a report. The runner had
+recorded the canonical feature path in Windows form with backslashes, while the pinned
+snapshot manifest used repository-portable forward slashes. Both records named the
+same in-repository file and carried the same SHA-256, but the postprocessor compared
+their raw strings and rejected the contract.
+
+The postprocessor now resolves both representations through its existing repository-
+containment validator before comparing paths; all hash, protocol and source checks are
+unchanged. A Windows-separator regression was added to the separately pinned benchmark
+contract test. The complete `tests/test_expanded_closeout.py` suite passed 7 tests.
+The immutable run and its source manifests were not modified.
+
+### 28 September 2026 — hash-verified assignment release bundle
+
+Added `scripts/build_assignment_release.py` as a read-only packager for the generated
+WP7 report, assignment evidence export, final evidence notebook, verified citation
+register/BibTeX, dependency lock and licence. The packager verifies both report
+manifests and every declared output hash before creating the ZIP; it never reads or
+copies raw run artefacts. It writes a generated entry manifest inside the archive and
+separate checksum and GitHub handoff files beside it.
+
+The first bundle, `release/assignment-evidence-20260928T005423Z-0634efaf.zip`, contains
+32 hash-declared source entries plus its bundle manifest. Independent archive testing
+re-read every entry and reconciled its SHA-256 with the embedded manifest. The release
+packager contract suite passed 2 tests. GitHub publication remains a human action; no
+tag, release or public-access claim was created by this packaging step.
+
+### 28 September 2026 — final evidence notebook publication contract
+
+Strengthened `notebooks/final_evidence.ipynb` as the local precursor to the required
+public notebook without publishing it or inventing a public notebook/release URL. All
+cells now have stable unique IDs. The notebook names canonical run
+`20260928T005423Z-0634efaf`, report directory
+`reports/expanded_closeout/20260928T005423Z-0634efaf`, source revision
+`e9b3e0cdf57c63c87a9dc881d58b1696f0472ba5`, and report-manifest SHA-256
+`4144c9d1bd0c1637eb83021edd7d5359255aa56e73e13e49c5cd1f1d5fd1190a`.
+Its setup cell verifies those identifiers and the exact eleven-table contract before
+calling the existing expanded-report loader, which independently checks declared
+table hashes and schemas.
+
+Added separate local and future clean-runtime instructions. The known repository
+remote is recorded as a location, not as a claim of public accessibility. Submission
+tag, release-archive URL and archive-hash values remain explicit `NOT_PUBLISHED`
+placeholders; opting into public bootstrap fails closed until they are replaced by
+verified publication values. An opt-in bounded-demonstration cell invokes only
+`python -m trading_pipeline.run --config ...`. It refuses execution without an
+explicit in-repository config and states that the existing synthetic smoke config is
+software verification rather than real-data research evidence.
+
+Focused tests now require stable unique cell IDs, canonical run/revision/manifest
+identifiers, publication placeholders, authoritative runner usage and fail-closed
+public bootstrap. The existing synthetic standalone-report execution test uses an
+explicit test-only noncanonical override. Verification passed with `3 passed` from
+the final-notebook subset of `tests/test_dashboard.py`. A separate code-cell execution
+against the actual canonical report loaded all eleven hash-verified tables and printed
+the expected run ID and manifest SHA-256. The first plain Windows-console attempt
+encountered only a CP1252 display encoding error while printing Unicode table borders;
+rerunning that script with Python UTF-8 mode completed. A headless `nbconvert --execute`
+Run All was initially blocked when the sandbox prevented Jupyter from applying its
+Windows connection-file ACL; the approved local-kernel retry completed in 12 seconds
+and wrote a disposable executed copy under `.tmp/`, which was removed after the check.
+No report evidence or raw run artefact was modified.
+
+### 28 September 2026 — generated factual assignment-report draft
+
+Added `trading_pipeline.reporting.assignment_report`, a read-only report builder that
+verifies the WP7 and assignment-export manifests and their declared output hashes
+before rendering prose, tables and figures. It consumes only the generated reports
+and the bounded citation register/BibTeX; it does not read or modify model artefacts,
+fit models, tune parameters or select from the final holdout.
+
+The generated draft is under
+`reports/assignment/20260928T005423Z-0634efaf/v1/report/`. It covers the task input and
+output contract, all seven arms, feature and point-in-time methodology, HPO chronology,
+statistical-versus-economic objective mismatch, every arm/scenario holdout cell,
+limitations and provenance. The holdout is labelled descriptive throughout. Personal
+reflection, financial implications and knowledge gaps remain explicit student-authored
+prompts, and the public notebook URL remains a fail-closed placeholder.
+
+The build emitted a 3,175-word Markdown draft, a copied hash-identical bibliography,
+three print-resolution PNG figures and `report_manifest.json` with exact input/output
+hashes. The focused report contract suite passed 3 tests; Python compilation also
+passed. No DOCX or PDF was created.

@@ -103,8 +103,10 @@ def _protocol_inputs(
     sources[source_relative] = snapshot["source_manifest_sha256"]
     feature_relative = snapshot["feature_path"]
     feature_path = _inside(root, feature_relative)
-    if (snapshot["feature_sha256"] != _hash(feature_path)
-            or metadata.get("feature_path") != feature_relative
+    metadata_feature_relative = metadata.get("feature_path")
+    if (not isinstance(metadata_feature_relative, str)
+            or snapshot["feature_sha256"] != _hash(feature_path)
+            or _inside(root, metadata_feature_relative) != feature_path
             or metadata.get("feature_sha256") != snapshot["feature_sha256"]):
         raise ValueError("Canonical feature snapshot is not hash-pinned")
     sources[feature_relative] = snapshot["feature_sha256"]

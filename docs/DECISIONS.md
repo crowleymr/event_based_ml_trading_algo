@@ -169,3 +169,18 @@ epochs for deep models and 1,000 steps for RL; the original two-candidate full-f
 HPO remains the only selection input. These are local reduced-fidelity descriptive
 effects, not global causal claims. The score-blind runtime gate includes both matrices,
 and the sealed holdout remains forbidden for sensitivity or selection.
+
+2026-09-28 RL evidence-performance and visibility correction: approved-v4 attempt
+`20260927T192408Z-b32c71ba` was stopped during controlled sensitivity after 47 of
+220 cells had checkpointed with no recorded cell failure, before family locks or
+holdout access. The operational ledgers showed increasing RL cell duration while the
+model fit telemetry remained short. Code inspection identified two score-independent
+engineering causes: every RL checkpoint decoded the entire growing eligibility and
+exclusion history to recover rows just written, and every architecture candidate
+rebuilt the same causal fold/scenario episode. The replacement carries current-cell
+price evidence directly into its checkpoint and caches immutable episode inputs by
+fold and risk scenario; candidate fits, parameters, seeds, scores, ledgers, T+1 prices,
+eligibility rules and selection remain unchanged. Candidate start/completion logs now
+report counters and elapsed time without scores. No result, ranking or holdout value
+informed the correction. Code-state drift makes the stopped attempt ineligible for
+resume. Approved-v5 requires fresh verification and a fresh run.

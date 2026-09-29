@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 import json
+import logging
+from pathlib import Path
 from types import SimpleNamespace
+
+import polars as pl
 
 from trading_pipeline.experiments.default_registry import default_registry
 from trading_pipeline.experiments import study_runner as runner
@@ -61,7 +66,7 @@ def test_dqn_design_is_deterministic_and_covers_every_parameter():
     assert len(first["proposals"]) == 13
 
 
-def test_runner_collects_complete_and_failed_controlled_cells(monkeypatch, tmp_path):
+def test_runner_collects_complete_and_failed_controlled_cells(monkeypatch, tmp_path, caplog):
     registry = default_registry()
     arm = {"id": "EN", "component_id": "supervised.elastic_net.v1",
            "interface": "SupervisedModel", "feature_set_id": "F1"}
@@ -106,6 +111,7 @@ def test_runner_collects_complete_and_failed_controlled_cells(monkeypatch, tmp_p
         return None, 0.1, 0.2, {"wall_seconds": 0.01}, None
 
     monkeypatch.setattr(runner, "_fit_score", fit_score)
+    caplog.set_level(logging.INFO, logger=runner.__name__)
     runner._run_controlled_sensitivity(
         study=SimpleNamespace(config=config),
         authority=SimpleNamespace(study_id="study", protocol_sha256="a" * 64),
@@ -125,3 +131,116 @@ def test_runner_collects_complete_and_failed_controlled_cells(monkeypatch, tmp_p
     assert failure["expected_cells"] == 1
     assert failure["exception_type"] == "RuntimeError"
     assert "synthetic candidate failure" in failure["diagnostic_traceback"]
+    messages = [record.getMessage() for record in caplog.records]
+    assert sum("candidate started" in message for message in messages) == 3
+    assert sum("candidate completed" in message for message in messages) == 2
+    assert sum("candidate failed" in message for message in messages) == 1
+    assert any("candidate=1/3 cells=0/3" in message for message in messages)
+    assert any("completed candidates=3 cells=2/3" in message for message in messages)
+
+
+def test_rl_trial_returns_current_price_rows_without_rescanning_history(monkeypatch, tmp_path):
+    days = tuple(date(2026, 1, day) for day in range(1, 5))
+    outputs = pl.DataFrame({"session_date": days})
+    episode_calls = []
+
+    def episode(*, split, **_kwargs):
+        episode_calls.append(split)
+        return SimpleNamespace(
+            dataset=SimpleNamespace(split=split),
+            eligibility=[{"signal_date": f"{split}-signal", "eligible_count": 2}],
+            exclusions=[{"signal_date": f"{split}-signal", "security_id": "X",
+                         "reason": "synthetic"}],
+            source_hashes={"prices": "a" * 64},
+        )
+
+    execution = SimpleNamespace(
+        metrics={"certainty_equivalent_mean": 0.25},
+        telemetry={"duration_seconds": 0.01}, actions=[], equity_curve=[],
+    )
+    monkeypatch.setattr(runner, "_rl_episode", episode)
+    monkeypatch.setattr(runner, "execute_study_rl_trial", lambda **_kwargs: execution)
+    actual_open = Path.open
+    evidence_append_opens = []
+
+    def counted_open(path, *args, **kwargs):
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if path.name in {"rl_price_eligibility.jsonl", "rl_price_exclusions.jsonl"} \
+                and mode == "a":
+            evidence_append_opens.append(path.name)
+        return actual_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", counted_open)
+    common = dict(
+        study=SimpleNamespace(config={"search": {"rl_training": {"total_timesteps": 10}}}),
+        authority=SimpleNamespace(study_id="study", protocol_sha256="b" * 64),
+        arm={"component_id": "rl-test"}, params={}, seed=41,
+        fold_id="inner-1", scenario="balanced", fit_dates=days[:2],
+        score_dates=days[2:], rows=[], bars=None, outputs=outputs,
+        feature_sha256="c" * 64, outputs_sha256="d" * 64,
+        fold_sha256="e" * 64, output=tmp_path,
+    )
+    episode_cache = {}
+    result = runner._rl_trial_cell(
+        **common, trial_id="trial-1", episode_cache=episode_cache)
+    second = runner._rl_trial_cell(
+        **common, trial_id="trial-2", episode_cache=episode_cache)
+
+    assert episode_calls == ["fit", "score"]
+    assert len(episode_cache) == 1
+    assert len(result["price_rows"]["rl_price_eligibility.jsonl"]) == 2
+    assert len(result["price_rows"]["rl_price_exclusions.jsonl"]) == 2
+    assert len(second["price_rows"]["rl_price_eligibility.jsonl"]) == 2
+    assert evidence_append_opens == [
+        "rl_price_eligibility.jsonl", "rl_price_exclusions.jsonl",
+        "rl_price_eligibility.jsonl", "rl_price_exclusions.jsonl",
+    ]
+    assert len((tmp_path / "rl_price_eligibility.jsonl").read_text().splitlines()) == 4
+    assert len((tmp_path / "rl_price_exclusions.jsonl").read_text().splitlines()) == 4
+
+
+def test_rl_episode_cache_interns_scenario_invariant_price_storage(monkeypatch, tmp_path):
+    @dataclass(frozen=True)
+    class Dataset:
+        split: str
+        prices: dict
+        calendar: tuple
+
+    @dataclass(frozen=True)
+    class Episode:
+        dataset: Dataset
+        eligibility: tuple = ()
+        exclusions: tuple = ()
+        source_hashes: dict | None = None
+
+    days = tuple(date(2026, 1, day) for day in range(1, 5))
+    outputs = pl.DataFrame({"session_date": days})
+
+    def episode(*, split, **_kwargs):
+        return Episode(Dataset(split, {(days[0], "A"): 1.0}, days),
+                       source_hashes={"prices": "a" * 64})
+
+    execution = SimpleNamespace(
+        metrics={"certainty_equivalent_mean": 0.25},
+        telemetry={"duration_seconds": 0.01}, actions=[], equity_curve=[],
+    )
+    monkeypatch.setattr(runner, "_rl_episode", episode)
+    monkeypatch.setattr(runner, "execute_study_rl_trial", lambda **_kwargs: execution)
+    common = dict(
+        study=SimpleNamespace(config={"search": {"rl_training": {"total_timesteps": 10}}}),
+        authority=SimpleNamespace(study_id="study", protocol_sha256="b" * 64),
+        arm={"component_id": "rl-test"}, params={}, seed=41,
+        fold_id="inner-1", fit_dates=days[:2], score_dates=days[2:],
+        rows=[], bars=None, outputs=outputs, feature_sha256="c" * 64,
+        outputs_sha256="d" * 64, fold_sha256="e" * 64, output=tmp_path,
+    )
+    cache = {}
+    runner._rl_trial_cell(
+        **common, scenario="balanced", trial_id="trial-balanced", episode_cache=cache)
+    runner._rl_trial_cell(
+        **common, scenario="aggressive", trial_id="trial-aggressive", episode_cache=cache)
+
+    balanced = cache[(days[:2], days[2:], "balanced")]
+    aggressive = cache[(days[:2], days[2:], "aggressive")]
+    assert aggressive[0].dataset.prices is balanced[0].dataset.prices
+    assert aggressive[1].dataset.prices is balanced[1].dataset.prices

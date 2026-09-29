@@ -190,7 +190,9 @@ def test_rl_inner_checkpoint_reuses_complete_cell_without_retraining(tmp_path, m
         runner._append(output / "rl_resource_ledger.jsonl", identity | {
             "duration_seconds": 1.0})
         return {"certainty_equivalent_mean": 0.1,
-                "telemetry": {"duration_seconds": 1.0}}
+                "telemetry": {"duration_seconds": 1.0},
+                "price_rows": {"rl_price_eligibility.jsonl": [],
+                               "rl_price_exclusions.jsonl": []}}
 
     monkeypatch.setattr(runner, "_rl_trial_cell", fake_rl_cell)
     first = CheckpointStore(source, protocol_sha256=protocol, code_sha256=code)
@@ -212,3 +214,70 @@ def test_rl_inner_checkpoint_reuses_complete_cell_without_retraining(tmp_path, m
     assert len((derived / "fit_ledger.jsonl").read_text().splitlines()) == 1
     assert len((derived / "outer_fit_ledger.jsonl").read_text().splitlines()) == 1
     assert len(list((derived / "rl_cells").iterdir())) == 2
+
+
+def test_checkpoint_store_reuses_sensitivity_cell_across_authorised_code_drift(tmp_path):
+    source = tmp_path / "source"
+    derived = tmp_path / "derived"
+    source.mkdir()
+    derived.mkdir()
+    protocol = "a" * 64
+    old_code = "b" * 64
+    new_code = "c" * 64
+    identity = {"trial_id": "sensitivity-1", "seed": 41}
+    original = CheckpointStore(source, protocol_sha256=protocol, code_sha256=old_code)
+    original.save("rl_sensitivity", identity, {"status": "complete"})
+    runner._write_new(source / "failure.json", {
+        "status": "failed",
+        "checkpoint_index_sha256": hashlib.sha256(
+            (source / "checkpoint_index.jsonl").read_bytes()).hexdigest(),
+    })
+
+    resumed = CheckpointStore(
+        derived, protocol_sha256=protocol, code_sha256=new_code, source=source,
+        source_code_sha256=old_code,
+    )
+    prior = resumed.get("rl_sensitivity", identity)
+    assert prior["record"] == {"status": "complete"}
+    resumed.save("rl_sensitivity", identity, prior["record"], reused_from=source.name)
+    saved = json.loads(next((derived / "checkpoints").glob("*.json")).read_text())
+    assert saved["code_sha256"] == new_code
+    assert saved["reused_from"] == source.name
+
+
+def test_run_resume_records_authorised_code_drift_and_reuses_cells(tmp_path, monkeypatch):
+    study, authority = _fixture(tmp_path, monkeypatch)
+    calls = []
+
+    def interrupted_fit(_registry, _arm, _params, _seed, _trial, fold, _fit,
+                        _stop, score, **_kwargs):
+        calls.append(fold)
+        if len(calls) == 2:
+            raise KeyboardInterrupt("operator stopped")
+        return None, 0.2, 0.1, {"wall_seconds": 1.0}, np.array([0.1] * len(score))
+
+    monkeypatch.setattr(runner, "_fit_score", interrupted_fit)
+    with pytest.raises(KeyboardInterrupt):
+        runner.run_study(study, authority, repository_root=tmp_path)
+    source = _run_dirs(tmp_path)[0]
+    monkeypatch.setattr(runner, "code_state_sha256", lambda *_args: "e" * 64)
+    with pytest.raises(ValueError, match="protocol, input or code state mismatch"):
+        runner.run_study(study, authority, repository_root=tmp_path, resume_from=source)
+
+    resumed_calls = []
+
+    def resumed_fit(_registry, _arm, _params, _seed, _trial, fold, _fit,
+                    _stop, score, **_kwargs):
+        resumed_calls.append(fold)
+        return None, 0.2, 0.1, {"wall_seconds": 1.0}, np.array([0.1] * len(score))
+
+    monkeypatch.setattr(runner, "_fit_score", resumed_fit)
+    completed = runner.run_study(
+        study, authority, repository_root=tmp_path, resume_from=source,
+        allow_code_drift=True,
+    )
+    lineage = json.loads((completed / "started.json").read_text())["resume_lineage"]
+    assert resumed_calls == ["i2", "o1", "holdout"]
+    assert lineage["code_drift_authorised"] is True
+    assert lineage["source_code_state_sha256"] == "d" * 64
+    assert lineage["resumed_code_state_sha256"] == "e" * 64

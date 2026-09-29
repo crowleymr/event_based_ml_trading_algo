@@ -57,12 +57,14 @@ def process_still_running(started: dict[str, Any]) -> bool:
 class CheckpointStore:
     def __init__(self, output: Path, *, protocol_sha256: str, code_sha256: str,
                  source: Path | None = None, allow_unmarked: bool = False,
+                 source_code_sha256: str | None = None,
                  code_guard: Callable[[], str] | None = None):
         self.output = output
         self.protocol_sha256 = protocol_sha256
         self.code_sha256 = code_sha256
         self.code_guard = code_guard
         self.source = source
+        expected_source_code = source_code_sha256 or code_sha256
         self._source_cells: dict[str, dict[str, Any]] = {}
         if source is not None:
             index = source / "checkpoint_index.jsonl"
@@ -88,7 +90,9 @@ class CheckpointStore:
                 entry = json.loads(line)
                 key = entry["key"]
                 if not isinstance(key, str) or not re.fullmatch(
-                    r"(?:supervised_inner|supervised_outer|supervised_holdout|rl_inner|rl_outer|rl_holdout)-[0-9a-f]{24}",
+                    r"(?:supervised_sensitivity|rl_sensitivity|supervised_inner|"
+                    r"supervised_outer|supervised_holdout|rl_inner|rl_outer|rl_holdout)-"
+                    r"[0-9a-f]{24}",
                     key):
                     raise ValueError("Malformed source checkpoint key")
                 if key in self._source_cells:
@@ -100,7 +104,7 @@ class CheckpointStore:
                 if (payload.get("key") != key
                         or cell_key(payload.get("kind"), payload.get("identity")) != key
                         or payload.get("protocol_sha256") != protocol_sha256
-                        or payload.get("code_sha256") != code_sha256):
+                        or payload.get("code_sha256") != expected_source_code):
                     raise ValueError(f"Source checkpoint authority mismatch: {key}")
                 for relative, expected in payload.get("artefact_sha256", {}).items():
                     artefact = (source / relative).resolve()

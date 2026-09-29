@@ -85,7 +85,7 @@ an acceptance gate changes; generated artefacts and tests remain the evidence au
   224 tests passed, the six-hour calibration selected the complete deadline tier at
   6,625 seconds, and approved-v3 was authority-verified at protocol SHA-256
   `d0d4c9c0454924a342839d5c88ae67bd338003cc88f4e2155bb1886d4189e4b5`.
-- [ ] Execute the deadline-feasible inner-HPO and outer-evaluation matrix; seal family locks before holdout access. The deadline-tier approved-v2 attempt failed before a complete RL candidate and before holdout access. Its completed supervised evidence is historical only because it predates the resume contract. Approved-v3 binds point-in-time observed-history eligibility, exact weekly endpoint valuation and immutable per-cell continuation.
+- [ ] Execute the deadline-feasible inner-HPO and outer-evaluation matrix; seal family locks before holdout access. The deadline-tier approved-v2 attempt failed before a complete RL candidate and before holdout access. Its completed supervised evidence is historical only because it predates the resume contract. Approved-v5 binds point-in-time observed-history eligibility, exact weekly endpoint valuation, controlled sensitivity and immutable per-cell continuation.
   The first approved-v3 attempt `20260927T123550Z-a6e5c43f` was operator-stopped in
   outer fold 1 to replace SciPy's constant-input warning with an explicit, numerically
   identical neutral-IC guard. It did not open holdout and is not resumable after the
@@ -105,6 +105,37 @@ an acceptance gate changes; generated artefacts and tests remain the evidence au
   final fits/reporting), retaining the six-hour gate. The fresh full suite passed
   235 tests with one platform skip; approved-v4 is authority-verified at protocol
   SHA-256 `2b6095fbd48cb93a99e270292292dca1ceaf60b3c4c288f6e714339a66532678`.
+- [x] Stop approved-v4 attempt `20260927T192408Z-b32c71ba` during controlled
+  sensitivity after 47 of 220 cells completed with zero recorded cell failures. No
+  family lock or holdout access occurred. The stop was prompted by operational
+  evidence: candidate progress was not emitted to the terminal, and RL checkpointing
+  repeatedly decoded the complete growing price-evidence history. Its partial run and
+  supervisor logs remain unchanged and are not eligible for reuse after the code-state
+  correction.
+- [x] Make RL evidence capture linear in the current cell by carrying its in-memory
+  eligibility/exclusion rows directly into the immutable checkpoint. Cache identical
+  causal RL episodes by fold and risk scenario while retaining independent candidate
+  training and per-candidate evidence. Add score-free controlled-sensitivity progress
+  messages to both detailed logs and the concise supervisor terminal. The focused
+  suite passed 28 tests and the full suite passed 236 tests with one platform skip.
+  Fresh synthetic receipts and capability gate v5 passed all seven arms.
+- [x] Finalise and authority-verify
+  `configs/studies/expanded_closeout_approved_v5.yaml` at protocol SHA-256
+  `231a824aa1c1167f081408972772c587d60ccbd9b7e5688ee8d037869c2ef84b`.
+- [ ] Approved-v5 continuation `20260927T231630Z-67e4fafb` was deliberately paused
+  after 124 of 220 controlled-sensitivity cells were complete and checkpointed. No
+  HPO estimate, family lock or holdout result exists yet. The pause followed measured
+  outer-fold evidence that DQN/PPO backend training took about one second while each
+  uncached candidate spent about one minute rebuilding identical causal episodes.
+  The next continuation must use this 124-cell run as its immutable `--resume-from`
+  source with the explicit code-drift receipt; it must not rerun any complete cell.
+- [x] Bound and verify score-preserving RL episode reuse. The runner now materialises
+  each fold/risk-scenario input pair once and reuses only that immutable pair across
+  independent DQN/PPO candidates. Cache scope is one outer fold; scenario-invariant
+  price dictionaries are interned rather than copied, preventing the former unbounded
+  multi-fold memory retention. Hyperparameters, seeds, training, evaluation and
+  per-candidate evidence remain independent. Focused tests passed 20, the cache-specific
+  suite passed 6, and the full suite passed 240 with one platform skip.
 - [ ] Execute the descriptive holdout once, followed by the unified T+1/cost-reconciled model × risk test bench.
 - [ ] Generate supervised model-conditioned frontiers and all-model realised risk-return curves.
 - [x] Implement the WP7 report/dashboard/notebook consumers. Both report generation and
@@ -141,18 +172,19 @@ an acceptance gate changes; generated artefacts and tests remain the evidence au
   alter or recompute the raw run evidence.
 - [ ] Freeze and commit the exact code revision, run/report IDs, hashes and operator manual.
 
-Remaining critical-path order: launch approved-v4 through the supervisor; run controlled
-sensitivity, inner HPO
-and outer evaluation with family locks; open the descriptive holdout once; then generate
-the report, execute the notebook and complete the final audit/freeze. If that new run
-fails after a verified cell, continue it only through a new `--resume-from` attempt.
+Remaining critical-path order: resume from `20260927T231630Z-67e4fafb`; verify that the
+first RL cache miss is followed by low-latency cache hits without excess RSS; complete
+controlled sensitivity, inner HPO and outer evaluation with family locks; open the
+descriptive holdout once; then generate the report, execute the notebook and complete
+the final audit/freeze. If the continuation fails after a verified cell, continue it
+only through a new `--resume-from` attempt.
 
 Real-data causal OOF materialisation is complete (46 chronological windows, with protected
 labels excluded from fitting). Deep and RL bridge results remain engineering/capability
 evidence only. No completed expanded HPO/outer-evaluation or holdout result exists. Prepared
 protocol v2 cleared its representative smoke, calibration and capability gate,
-then failed as recorded above. Holdout access remains closed. Approved-v4 now supersedes
-v3 after its fresh verification gate; it retains the unchanged canonical
+then failed as recorded above. Holdout access remains closed. Approved-v5 now supersedes
+v4 after its fresh engineering verification gate; it retains the unchanged canonical
 data/window/benchmark/causal-stack sources and adds the separately approved controlled-
 sensitivity evidence contract. The transient prepared-v7/protocol-v8 staging pair is not an
 execution authority and was superseded before capability evidence was accepted.
@@ -683,3 +715,20 @@ The expanded close-out is complete when:
 - legacy runs remain byte-identical;
 - the full test/audit suite passes; and
 - conclusions clearly separate observed facts, generated evidence, interpretation, assumptions, exploratory findings and questions requiring human/future evidence.
+
+## 12. Live execution checkpoint — 28 September 2026
+
+The approved-v5 continuation remains in the HPO phase, currently executing the
+selection-ineligible controlled-sensitivity matrix. The PowerShell monitor is now
+ledger-driven and reports phase/activity, vertical latest-event fields, consolidated
+RAM and VRAM lines, and completed/planned candidates with cumulative per-fold runtime
+for every registered arm. Its ETA is deliberately partial when a remaining arm/fold
+has no observed duration. This monitoring refinement is read-only and does not change
+the active Python code-state hash, protocol, candidate execution or research results.
+
+The critical path after the current study process finishes remains: verify terminal
+status and immutable run audit; generate the expanded close-out report/dashboard
+artefacts from that completed run; execute and verify the educational notebook; then
+freeze the run/report/code identifiers and reconcile the paper evidence. No agent or
+operator should use monitor estimates or displayed progress as evidence that these
+gates have completed.

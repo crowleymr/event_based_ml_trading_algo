@@ -189,6 +189,7 @@ def test_final_notebook_reads_standalone_expanded_report(tmp_path, monkeypatch):
     root = tmp_path / "synthetic-run"
     _expanded_fixture(root)
     monkeypatch.setenv("TRADING_REPORT_DIR", str(root))
+    monkeypatch.setenv("TRADING_ALLOW_NONCANONICAL_REPORT", "1")
     monkeypatch.delenv("LAUNCH_TRADING_DASHBOARD", raising=False)
     notebook = json.loads((Path(__file__).parents[1] / "notebooks" / "final_evidence.ipynb").read_text(encoding="utf-8"))
     namespace = {"__name__": "__main__"}
@@ -197,6 +198,34 @@ def test_final_notebook_reads_standalone_expanded_report(tmp_path, monkeypatch):
             exec(compile("".join(cell["source"]), "final_evidence.ipynb", "exec"), namespace)
     assert namespace["expanded_report"] is True
     assert len(namespace["tables"]) == 11
+
+
+def test_final_notebook_has_stable_publication_and_evidence_contract():
+    notebook_path = Path(__file__).parents[1] / "notebooks" / "final_evidence.ipynb"
+    notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
+    ids = [cell.get("id") for cell in notebook["cells"]]
+    assert all(ids)
+    assert len(ids) == len(set(ids))
+
+    source = "\n".join("".join(cell["source"]) for cell in notebook["cells"])
+    assert "20260928T005423Z-0634efaf" in source
+    assert "e9b3e0cdf57c63c87a9dc881d58b1696f0472ba5" in source
+    assert "4144c9d1bd0c1637eb83021edd7d5359255aa56e73e13e49c5cd1f1d5fd1190a" in source
+    assert "PUBLIC_SUBMISSION_TAG_NOT_PUBLISHED" in source
+    assert "PUBLIC_REPORT_ARCHIVE_URL_NOT_PUBLISHED" in source
+    assert "PUBLIC_REPORT_ARCHIVE_SHA256_NOT_PUBLISHED" in source
+    assert "'trading_pipeline.run', '--config'" in source
+    assert "load_expanded_report(report_dir)" in source
+
+
+def test_final_notebook_public_bootstrap_fails_closed_until_published(monkeypatch):
+    notebook = json.loads(
+        (Path(__file__).parents[1] / "notebooks" / "final_evidence.ipynb").read_text(encoding="utf-8")
+    )
+    bootstrap = next(cell for cell in notebook["cells"] if cell.get("id") == "bootstrap-guard")
+    monkeypatch.setenv("TRADING_PUBLIC_BOOTSTRAP", "1")
+    with pytest.raises(RuntimeError, match="Public bootstrap is not published"):
+        exec(compile("".join(bootstrap["source"]), "final_evidence.ipynb", "exec"), {})
 
 
 def test_report_loader_is_read_only_and_schema_checked(tmp_path):

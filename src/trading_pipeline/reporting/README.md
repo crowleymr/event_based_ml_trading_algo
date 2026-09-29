@@ -38,3 +38,21 @@ output with source hashes and a compatibility key:
 contains persisted experiment-comparison rows where available. Different compatibility
 keys may be inspected together but must not be pooled or ranked as a fair comparison.
 The catalogue never trains, audits with writes, or changes source runs.
+
+## Assignment evidence export
+
+After the expanded closeout report has been generated, create a new assignment-specific
+evidence version with:
+
+```powershell
+.venv/Scripts/python -m trading_pipeline.reporting.assignment_export `
+  --run-id <expanded-run-id> --version v1
+```
+
+The command verifies the completed run audit and every declared WP7 report output, then
+writes paired CSV/Parquet tables beneath `reports/assignment/<run-id>/<version>/`.
+These tables cover controlled sensitivity, outer-versus-holdout predictive diagnostics,
+recorded fit telemetry, the model-input feature dictionary, split-level descriptive
+statistics, explicit unavailable evidence and provenance. The destination must be new.
+The command does not train, select, or write under `runs/`; the sealed holdout remains
+descriptive only.

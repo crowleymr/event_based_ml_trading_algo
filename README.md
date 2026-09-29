@@ -172,7 +172,7 @@ vintage would differ and require a new documented approval.
 When the pinned bundle is present, launch through the read-only resource supervisor:
 
 ~~~powershell
-.venv\Scripts\python.exe -m trading_pipeline.operations.study_supervisor --study configs/studies/expanded_closeout_approved_v4.yaml --log-dir reports/operations/expanded-closeout-v4-attempt-1
+.venv\Scripts\python.exe -m trading_pipeline.operations.study_supervisor --study configs/studies/expanded_closeout_approved_v5.yaml --log-dir reports/operations/expanded-closeout-v5-attempt-1
 ~~~
 
 The supervisor starts the authoritative `trading_pipeline.run --study ...` process,
@@ -198,7 +198,7 @@ $failedRun = Get-ChildItem runs\expanded_closeout -Directory |
     Select-Object -First 1
 
 .venv\Scripts\python.exe -m trading_pipeline.operations.study_supervisor `
-    --study configs/studies/expanded_closeout_approved_v4.yaml `
+    --study configs/studies/expanded_closeout_approved_v5.yaml `
     --resume-from $failedRun.FullName `
     --log-dir reports/operations/expanded-closeout-resume-1
 ~~~

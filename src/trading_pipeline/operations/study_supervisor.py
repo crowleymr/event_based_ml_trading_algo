@@ -118,7 +118,8 @@ class ResourceSampler:
 _WARNING = re.compile(r"warning|\bwarn(?:ing)?\s*:", re.IGNORECASE)
 _ERROR = re.compile(r"\berror\b|\bexception\b|\btraceback\b|\bfailed\b", re.IGNORECASE)
 _STATUS = re.compile(
-    r"\b(?:Expanded study|Outer fold|Supervised arm|Inner candidate|Outer evaluation|"
+    r"\b(?:Expanded study|Controlled sensitivity|Outer fold|Supervised arm|"
+    r"Inner candidate|Outer evaluation|"
     r"RL arm|Family locks|Descriptive(?: RL)? holdout)\b",
     re.IGNORECASE,
 )
@@ -151,18 +152,23 @@ def _drain(stream, name: str, output, events, lock: threading.Lock) -> None:
 
 
 def supervise(study: Path, log_dir: Path, *, interval_seconds: float = 10.0,
-              resume_from: Path | None = None, sampler=None) -> int:
+              resume_from: Path | None = None, allow_code_drift: bool = False,
+              sampler=None) -> int:
     if interval_seconds <= 0:
         raise ValueError("interval_seconds must be positive")
     if not study.is_file():
         raise FileNotFoundError(study)
     if resume_from is not None and not resume_from.is_dir():
         raise FileNotFoundError(resume_from)
+    if allow_code_drift and resume_from is None:
+        raise ValueError("Code-drift override requires --resume-from")
     sampler = sampler if sampler is not None else ResourceSampler()
     log_dir.mkdir(parents=True, exist_ok=False)
     command = [sys.executable, "-u", "-m", "trading_pipeline.run", "--study", str(study.resolve())]
     if resume_from is not None:
         command.extend(["--resume-from", str(resume_from.resolve())])
+    if allow_code_drift:
+        command.append("--allow-code-drift")
     start = time.monotonic()
     with (log_dir / "events.jsonl").open("x", encoding="utf-8") as events, \
          (log_dir / "metrics.jsonl").open("x", encoding="utf-8") as metrics, \
@@ -171,6 +177,7 @@ def supervise(study: Path, log_dir: Path, *, interval_seconds: float = 10.0,
         lock = threading.Lock()
         _record(events, "starting", command=command, study=str(study.resolve()),
                 resume_from=str(resume_from.resolve()) if resume_from is not None else None,
+                allow_code_drift=allow_code_drift,
                 pid=os.getpid(), interval_seconds=interval_seconds)
         print(f"{_local_timestamp()} STATUS Starting supervised study process", flush=True)
         process = None
@@ -243,11 +250,14 @@ def main() -> None:
     parser.add_argument("--log-dir", type=Path, required=True, help="New monitoring directory")
     parser.add_argument("--resume-from", type=Path,
                         help="Terminally failed checkpointed run to continue immutably")
+    parser.add_argument("--allow-code-drift", action="store_true",
+                        help="Explicitly permit verified cell reuse after an engineering code change")
     parser.add_argument("--interval-seconds", type=float, default=10.0)
     args = parser.parse_args()
     raise SystemExit(supervise(args.study, args.log_dir,
                                interval_seconds=args.interval_seconds,
-                               resume_from=args.resume_from))
+                               resume_from=args.resume_from,
+                               allow_code_drift=args.allow_code_drift))
 
 
 if __name__ == "__main__":

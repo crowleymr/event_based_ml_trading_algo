@@ -120,7 +120,8 @@ def test_stage_counts_reconcile_to_security_rows():
 
 def test_protocol_inputs_uses_separately_pinned_benchmark(tmp_path):
     day = date(2026, 1, 1)
-    features = tmp_path / "features.parquet"
+    features = tmp_path / "data" / "features.parquet"
+    features.parent.mkdir()
     benchmark = tmp_path / "benchmark.parquet"
     pl.DataFrame([{"security_id": "A", "ticker": "AAA", "session_date": day,
                    "adjusted_close": 10.0, "vol_20d": 0.2}]).write_parquet(features)
@@ -131,24 +132,25 @@ def test_protocol_inputs_uses_separately_pinned_benchmark(tmp_path):
     snapshot = tmp_path / "snapshot.json"
     _write(snapshot, {"source_manifest_path": "source.json",
                       "source_manifest_sha256": _hash(source),
-                      "feature_path": "features.parquet", "feature_sha256": _hash(features)})
+                      "feature_path": "data/features.parquet", "feature_sha256": _hash(features)})
     benchmark_manifest = tmp_path / "benchmark.json"
     _write(benchmark_manifest, {"benchmark_id": "B0-SPY", "ticker": "SPY",
         "bars_path": "benchmark.parquet", "bars_sha256": _hash(benchmark)})
     pinned = {"snapshot.json": _hash(snapshot)}
     protocol = {"authority": {"input_sha256": pinned, "protocol_sha256": "p"},
         "data": {"snapshot_manifest": "snapshot.json",
-                 "rl_inputs": {"bars_path": "features.parquet",
+                 "rl_inputs": {"bars_path": "data/features.parquet",
                                "bars_sha256": _hash(features)},
                  "benchmark_contract": {"benchmark_id": "B0-SPY",
                     "manifest_path": "benchmark.json",
                     "manifest_sha256": _hash(benchmark_manifest),
                     "bars_path": "benchmark.parquet", "bars_sha256": _hash(benchmark)}}}
     metadata = {"input_sha256": pinned, "protocol_sha256": "p",
-                "feature_path": "features.parquet", "feature_sha256": _hash(features)}
+                "feature_path": "data\\features.parquet", "feature_sha256": _hash(features)}
     canonical, spy, returned_snapshot, sources = _protocol_inputs(
         tmp_path, metadata, protocol)
     assert canonical["ticker"].to_list() == ["AAA"]
     assert spy["ticker"].to_list() == ["SPY"]
     assert returned_snapshot["requested_count"] == 500
+    assert sources["data/features.parquet"] == _hash(features)
     assert sources["benchmark.parquet"] == _hash(benchmark)
