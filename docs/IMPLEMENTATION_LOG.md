@@ -1,5 +1,35 @@
 # Implementation log
 
+## 2026-09-29 - Native assignment diagram replacement
+
+- Replaced Mermaid blocks and the earlier simplified SVG diagrams in
+  `notebooks/final_assignment_showcase.ipynb` with eight native PNG figures
+  extracted from the supplied assignment DOCX: ETL/PIT controls, feature/label
+  timing, shared architecture, LSTM, Transformer, DQN, PPO and nested HPO.
+- Removed the obsolete SVG assets and updated the notebook-structure test to
+  require the native figure set. The source DOCX and PPTX were not modified.
+- Verification: no Mermaid blocks or obsolete SVG references remain; all native
+  assets exist; focused structure tests passed 2/2; clean `nbconvert --execute`
+  completed and fresh smoke run `20260929T064158Z-bd30e90a` completed through the
+  authoritative CLI.
+
+## 2026-09-29 - Final assignment showcase notebook
+
+- Added `notebooks/final_assignment_showcase.ipynb` as a read-only educational
+  showcase. It loads the canonical expanded report through the hash-verifying
+  dashboard loader, documents the point-in-time and temporal-validation contract,
+  and invokes `python -m trading_pipeline.run --config configs/smoke.yaml` for a
+  bounded software-verification demonstration.
+- Added five static SVG diagrams under `notebooks/assets/` and generated
+  provenance-backed charts/tables under
+  `reports/notebook_outputs/final-assignment-showcase-v1/`. Immutable run and
+  expanded-report artefacts were not modified.
+- Verification: clean `nbconvert --execute` completed from first cell to last;
+  fresh smoke run `20260929T045336Z-6fcdd56b` completed with audit passed, recorded
+  T+1-close execution and 10 bps one-way costs; generated output hashes matched
+  the notebook manifest. The notebook remains exploratory/descriptive and does
+  not select from final-holdout results.
+
 ## 2026-09-28 — Assignment-specific evidence exporter
 
 - Added the separate read-only `trading_pipeline.reporting.assignment_export` CLI. It
